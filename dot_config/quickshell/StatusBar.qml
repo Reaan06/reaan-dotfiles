@@ -244,7 +244,7 @@ Item {
             }
         }
 
-        // ──────── 2. WORKSPACES ────────
+        // ──────── 2. WORKSPACES (grupos por monitor, estilo Caelestia) ────────
         Pill {
             pillColor: root.cPill; hoverEnabled: false; hPad: 6
             Row {
@@ -253,22 +253,27 @@ Item {
                     model: 7
                     Rectangle {
                         required property int index
+                        property int wsNum: index + 1
+                        // Detectar si este WS está activo usando módulo 10
+                        property bool isActive: Hyprland.focusedWorkspace
+                            && ((Hyprland.focusedWorkspace.id - 1) % 10 + 1) === wsNum
                         width: 26; height: 24; radius: 8
-                        color: Hyprland.focusedWorkspace
-                               && Hyprland.focusedWorkspace.id === (index + 1)
-                               ? Qt.rgba(0.58, 0.89, 0.84, 0.30) : "transparent"
+                        color: isActive ? Qt.rgba(0.58, 0.89, 0.84, 0.30) : "transparent"
                         Behavior on color { ColorAnimation { duration: 150 } }
                         Text {
                             anchors.centerIn: parent
-                            text: (parent.index + 1).toString()
+                            text: parent.wsNum.toString()
                             font.family: root.font; font.pixelSize: 11; font.bold: true
-                            color: Hyprland.focusedWorkspace
-                                   && Hyprland.focusedWorkspace.id === (parent.index + 1)
-                                   ? root.cTeal : root.cSub
+                            color: parent.isActive ? root.cTeal : root.cSub
                         }
                         MouseArea {
                             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            onClicked: Hyprland.dispatch("workspace " + (parent.index + 1))
+                            onClicked: {
+                                // Calcular grupo del monitor actual
+                                var active = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+                                var group = Math.floor((active - 1) / 10) * 10
+                                Hyprland.dispatch("workspace " + (group + parent.wsNum))
+                            }
                         }
                     }
                 }
