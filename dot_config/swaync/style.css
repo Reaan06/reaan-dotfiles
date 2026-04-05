@@ -1,0 +1,279 @@
+/* ===================================================================
+   Swaync Style - Catppuccin Mocha Theme
+   =================================================================== */
+
+* {
+    font-family: "JetBrainsMono Nerd Font", sans-serif;
+    font-size: 14px;
+}
+
+/* Notification Row */
+.notification-row {
+    outline: none;
+    margin: 8px;
+    padding: 0;
+}
+
+.notification-row:focus,
+.notification-row:hover {
+    background: rgba(49, 50, 68, 0.4);
+    border-radius: 12px;
+}
+
+/* Individual Notification */
+.notification {
+    background: rgba(30, 30, 46, 0.95);
+    border-radius: 12px;
+    margin: 6px 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    padding: 12px;
+    border: 1px solid rgba(137, 180, 250, 0.2);
+}
+
+.notification.critical {
+    border: 2px solid rgba(243, 139, 168, 0.8);
+}
+
+.notification-content {
+    background: transparent;
+    padding: 8px;
+    border-radius: 12px;
+}
+
+.notification-default-action {
+    padding: 10px;
+    margin: 0;
+    background: transparent;
+    border-radius: 12px;
+    color: #cdd6f4;
+}
+
+.notification-default-action:hover {
+    background: rgba(49, 50, 68, 0.8);
+}
+
+.notification-title {
+    font-weight: bold;
+    font-size: 15px;
+    color: #89b4fa;
+    margin-bottom: 4px;
+}
+
+.notification-body {
+    font-size: 13px;
+    color: #cdd6f4;
+    margin-top: 4px;
+}
+
+.notification-action {
+    background: rgba(137, 180, 250, 0.15);
+    color: #89b4fa;
+    border-radius: 8px;
+    margin: 4px;
+    padding: 6px 12px;
+    border: 1px solid rgba(137, 180, 250, 0.3);
+}
+
+.notification-action:hover {
+    background: rgba(137, 180, 250, 0.25);
+}
+
+.close-button {
+    background: rgba(243, 139, 168, 0.15);
+    color: #f38ba8;
+    border-radius: 8px;
+    padding: 4px 8px;
+    margin: 4px;
+}
+
+.close-button:hover {
+    background: rgba(243, 139, 168, 0.3);
+}
+
+/* Control Center */
+.control-center {
+    background: rgba(30, 30, 46, 0.95);
+    border-radius: 16px;
+    margin: 10px;
+    padding: 12px;
+    border: 1px solid rgba(137, 180, 250, 0.2);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+}
+
+.control-center-list {
+    background: transparent;
+}
+
+.control-center-list-placeholder {
+    opacity: 0.5;
+    color: #6c7086;
+    font-size: 16px;
+    margin: 20px;
+}
+
+/* Widget Title */
+.widget-title {
+    color: #cba6f7;
+    font-size: 18px;
+    font-weight: bold;
+    margin: 12px;
+}
+
+.widget-title > button {
+    background: rgba(203, 166, 247, 0.15);
+    color: #cba6f7;
+    border-radius: 8px;
+    padding: 6px 12px;
+    border: 1px solid rgba(203, 166, 247, 0.3);
+    font-size: 12px;
+}
+
+.widget-title > button:hover {
+    background: rgba(203, 166, 247, 0.25);
+}
+
+/* DND Widget */
+.widget-dnd {
+    background: rgba(137, 180, 250, 0.1);
+    color: #89b4fa;
+    margin: 10px;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    border: 1px solid rgba(137, 180, 250, 0.2);
+}
+
+.widget-dnd > switch {
+    background: rgba(49, 50, 68, 0.8);
+    border-radius: 20px;
+}
+
+.widget-dnd > switch:checked {
+    background: #89b4fa;
+}
+
+/* MPRIS Widget */
+.widget-mpris {
+    background: rgba(49, 50, 68, 0.6);
+    padding: 12px;
+    border-radius: 12px;
+    margin: 10px;
+    border: 1px solid rgba(137, 180, 250, 0.15);
+}
+
+.widget-mpris-player {
+    background: transparent;
+    padding: 8px;
+}
+
+.widget-mpris-title {
+    font-weight: bold;
+    font-size: 14px;
+    color: #cdd6f4;
+}
+
+.widget-mpris-subtitle {
+    font-size: 12px;
+    color: #bac2de;
+}
+
+.widget-mpris > button {
+    background: rgba(137, 180, 250, 0.15);
+    color: #89b4fa;
+    border-radius: 8px;
+    margin: 4px;
+    padding: 8px;
+}
+
+.widget-mpris > button:hover {
+    background: rgba(137, 180, 250, 0.25);
+}
+
+/* Volume Widget */
+.widget-volume {
+    background: rgba(250, 179, 135, 0.1);
+    color: #fab387;
+    margin: 10px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(250, 179, 135, 0.2);
+}
+
+.widget-volume > scale {
+    background: rgba(49, 50, 68, 0.8);
+    border-radius: 8px;
+}
+
+.widget-volume > scale trough {
+    background: rgba(49, 50, 68, 0.8);
+    border-radius: 8px;
+    min-height: 8px;
+}
+
+.widget-volume > scale highlight {
+    background: #fab387;
+    border-radius: 8px;
+}
+
+/* Backlight Widget */
+.widget-backlight {
+    background: rgba(249, 226, 175, 0.1);
+    color: #f9e2af;
+    margin: 10px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(249, 226, 175, 0.2);
+}
+
+.widget-backlight > scale trough {
+    background: rgba(49, 50, 68, 0.8);
+    border-radius: 8px;
+    min-height: 8px;
+}
+
+.widget-backlight > scale highlight {
+    background: #f9e2af;
+    border-radius: 8px;
+}
+
+/* Buttons Grid Widget */
+.widget-buttons-grid {
+    padding: 10px;
+    margin: 10px;
+    border-radius: 12px;
+    background: rgba(49, 50, 68, 0.4);
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button {
+    background: rgba(137, 180, 250, 0.15);
+    color: #89b4fa;
+    border-radius: 10px;
+    margin: 4px;
+    padding: 12px;
+    font-size: 20px;
+    border: 1px solid rgba(137, 180, 250, 0.2);
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button:hover {
+    background: rgba(137, 180, 250, 0.25);
+}
+
+/* Scrollbar */
+scrollbar {
+    background: transparent;
+}
+
+scrollbar trough {
+    background: rgba(49, 50, 68, 0.4);
+    border-radius: 8px;
+}
+
+scrollbar slider {
+    background: rgba(137, 180, 250, 0.4);
+    border-radius: 8px;
+    min-width: 8px;
+}
+
+scrollbar slider:hover {
+    background: rgba(137, 180, 250, 0.6);
+}

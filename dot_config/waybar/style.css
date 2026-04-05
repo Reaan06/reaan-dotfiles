@@ -1,0 +1,207 @@
+/* --- Waybar Style - Ultra Modern Glassmorphism --- */
+
+* {
+    border: none;
+    border-radius: 0;
+    font-family: "JetBrainsMono Nerd Font", "Roboto", "Helvetica", "Arial", sans-serif;
+    font-size: 13px;
+    min-height: 0;
+}
+
+window#waybar {
+    background: transparent;
+    color: #cdd6f4;
+}
+
+/* Estilo Base para cada "Isla" */
+#custom-power,
+#custom-launcher,
+#workspaces,
+#mpris,
+#clock {
+    background: rgba(24, 24, 37, 0.7);
+    padding: 0 14px;
+    margin: 4px 4px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: all 0.3s cubic-bezier(.55,-0.04,.3,1.44);
+}
+
+/* Botón de Power - Extremo izquierdo */
+#custom-power {
+    border-radius: 14px;
+    margin-right: 4px;
+    color: #f38ba8;
+    font-size: 16px;
+    background: rgba(243, 139, 168, 0.1);
+    border-color: rgba(243, 139, 168, 0.2);
+}
+
+#custom-power:hover {
+    background: rgba(243, 139, 168, 0.2);
+    border-color: rgba(243, 139, 168, 0.3);
+    color: #f38ba8;
+}
+
+/* Fusionar Logo y Workspaces - Mejor centrado */
+#custom-launcher {
+    border-radius: 14px 0 0 14px;
+    margin-right: 0;
+    color: #89b4fa;
+    font-size: 18px;
+    background: rgba(137, 180, 250, 0.1);
+    border-color: rgba(137, 180, 250, 0.2);
+}
+
+#workspaces {
+    border-radius: 0 14px 14px 0;
+    margin-left: 0;
+    border-left: none;
+    background: rgba(30, 30, 46, 0.4);
+    padding: 0 12px;
+}
+
+/* Contenedor unificado para módulos de la derecha */
+.modules-right {
+    background: rgba(24, 24, 37, 0.7);
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin: 4px;
+    padding: 0 4px;
+    transition: all 0.3s cubic-bezier(.55,-0.04,.3,1.44);
+}
+
+.modules-right:hover {
+    background: rgba(24, 24, 37, 0.85);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Módulos individuales dentro del contenedor derecho */
+#pulseaudio,
+#backlight,
+#network,
+#bluetooth,
+#battery,
+#cpu,
+#memory,
+#tray,
+#custom-notification {
+    background: transparent;
+    padding: 0 6px;
+    margin: 0;
+    border-radius: 0;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+/* Separadores visibles y parejos entre módulos */
+#pulseaudio,
+#backlight,
+#network,
+#bluetooth,
+#battery,
+#cpu,
+#memory,
+#tray {
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+    margin-right: 2px;
+}
+
+/* Último módulo sin separador */
+#custom-notification {
+    border-right: none;
+    margin-right: 0;
+}
+
+/* Fusionar Logo y Workspaces */
+#custom-launcher {
+    border-radius: 14px 0 0 14px;
+    margin-right: 0;
+    color: #89b4fa;
+    font-size: 18px;
+    background: rgba(137, 180, 250, 0.1);
+}
+
+#workspaces {
+    border-radius: 0 14px 14px 0;
+    margin-left: 0;
+    border-left: none;
+    background: rgba(30, 30, 46, 0.4);
+}
+
+#workspaces button {
+    padding: 0 12px;
+    color: #6c7086;
+    background: transparent;
+    transition: all 0.3s ease;
+}
+
+/* Colores para cada escritorio enumerado (Ultra Modern) */
+#workspaces button:nth-child(1) { color: #f38ba8; }
+#workspaces button:nth-child(2) { color: #fab387; }
+#workspaces button:nth-child(3) { color: #f9e2af; }
+#workspaces button:nth-child(4) { color: #a6e3a1; }
+#workspaces button:nth-child(5) { color: #89b4fa; }
+
+/* Color por defecto para cualquier escritorio > 5 */
+#workspaces button {
+    color: #cba6f7; /* Púrpura suave para dinámicos */
+}
+
+#workspaces button.active {
+    background: rgba(205, 214, 244, 0.1);
+    border-radius: 10px;
+    color: #cdd6f4;
+    font-weight: bold;
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.05);
+}
+
+/* Controlador Audiovisual (Izquierda) */
+#mpris {
+    background: rgba(186, 194, 222, 0.05);
+    border: 1px solid rgba(186, 194, 222, 0.1);
+    color: #bac2de;
+    font-size: 12px;
+}
+
+#mpris span {
+    font-size: 16px;
+    color: #89b4fa;
+}
+
+/* Reloj (Centro - Mucho más moderno) */
+#clock {
+    background: rgba(137, 180, 250, 0.1);
+    color: #cdd6f4;
+    font-weight: bold;
+    border: 1px solid rgba(137, 180, 250, 0.2);
+    padding: 0 20px;
+}
+
+/* Módulos de la derecha */
+#pulseaudio, #backlight, #network, #battery, #cpu, #memory, #custom-notification {
+    font-weight: 500;
+}
+
+#pulseaudio { color: #fab387; }
+#backlight { color: #f9e2af; }
+#network { color: #a6e3a1; }
+#battery { color: #94e2d5; }
+#battery.warning { color: #f9e2af; }
+#battery.critical { color: #f38ba8; }
+#cpu { color: #cba6f7; }
+#memory { color: #f5c2e7; }
+#custom-notification { color: #89dceb; font-size: 15px; }
+
+/* Tray */
+#tray {
+    background: rgba(30, 30, 46, 0.4);
+}
+
+/* Efectos Hover */
+#custom-launcher:hover, #workspaces:hover, #mpris:hover, #clock:hover, 
+#pulseaudio:hover, #backlight:hover, #network:hover, #battery:hover, 
+#cpu:hover, #memory:hover, #custom-notification:hover {
+    background: rgba(49, 50, 68, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}

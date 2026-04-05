@@ -1,0 +1,120 @@
+configuration {
+    modi:                       "drun,run,filebrowser,window";
+    show-icons:                 true;
+    display-drun:               " Apps";
+    display-run:                " Run";
+    display-filebrowser:        " Files";
+    display-window:             " Windows";
+    drun-display-format:        "{name}";
+    hover-select:               true;
+    scroll-method:              1;
+}
+
+* {
+    font:                       "JetBrainsMono Nerd Font 10";
+    background:                 rgba(30, 30, 46, 0.85);
+    background-alt:             rgba(49, 50, 68, 0.7);
+    foreground:                 #CDD6F4;
+    selected:                   #89B4FA;
+    active:                     #A6E3A1;
+    urgent:                     #F38BA8;
+}
+
+window {
+    transparency:                "real";
+    location:                    south;
+    anchor:                      south;
+    fullscreen:                  false;
+    width:                       100%;
+    height:                      40%;
+    x-offset:                    0px;
+    y-offset:                    0px;
+    enabled:                     true;
+    border-radius:               20px 20px 0px 0px;
+    border:                      2px 0px 0px 0px;
+    border-color:                @selected;
+    background-color:            @background;
+    cursor:                      "default";
+}
+
+mainbox {
+    enabled:                     true;
+    spacing:                     20px;
+    padding:                     30px;
+    background-color:            transparent;
+    children:                    [ "inputbar", "listview" ];
+}
+
+inputbar {
+    enabled:                     true;
+    spacing:                     10px;
+    margin:                      0px 20% 0px 20%;
+    padding:                     12px;
+    border-radius:               12px;
+    background-color:            @background-alt;
+    text-color:                  @foreground;
+    children:                    [ "prompt", "entry" ];
+}
+
+prompt {
+    enabled:                     true;
+    background-color:            transparent;
+    text-color:                  inherit;
+}
+
+entry {
+    enabled:                     true;
+    background-color:            transparent;
+    text-color:                  inherit;
+    cursor:                      text;
+    placeholder:                 "Buscar aplicaciones...";
+    placeholder-color:           inherit;
+}
+
+listview {
+    enabled:                     true;
+    columns:                     6;
+    lines:                       3;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+    spacing:                     20px;
+    margin:                      0px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    cursor:                      "default";
+}
+
+element {
+    enabled:                     true;
+    spacing:                     10px;
+    padding:                     15px;
+    border-radius:               15px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    orientation:                 vertical;
+    cursor:                      pointer;
+}
+
+element selected.normal {
+    background-color:            @selected;
+    text-color:                  #1E1E2E;
+}
+
+element-icon {
+    background-color:            transparent;
+    text-color:                  inherit;
+    size:                        48px;
+    cursor:                      inherit;
+}
+
+element-text {
+    background-color:            transparent;
+    text-color:                  inherit;
+    vertical-align:              0.5;
+    horizontal-align:            0.5;
+}

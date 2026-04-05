@@ -1,0 +1,123 @@
+## Configuration file for CAVA - Audio Visualizer
+
+[general]
+# Smoothing mode. Can be 'normal', 'scientific' or 'waves'.
+mode = normal
+
+# Accepts only non-negative values.
+framerate = 60
+
+# 'autosens' will attempt to decrease sensitivity if the bars peak.
+autosens = 1
+
+# Manual sensitivity in %. If autosens is enabled, this will only be the initial value.
+sensitivity = 100
+
+# The number of bars (0-512). 0 sets it to auto (fill up console).
+bars = 0
+
+# Bar width. Default is 2.
+bar_width = 2
+
+# Bar spacing. Default is 1.
+bar_spacing = 1
+
+# Lower and higher cutoff frequencies for lowest and highest bars
+lower_cutoff_freq = 50
+higher_cutoff_freq = 10000
+
+# Seconds with no input before cava goes to sleep mode.
+sleep_timer = 0
+
+
+[input]
+# Audio capturing method. Possible methods are: 'pulse', 'alsa', 'fifo', 'sndio' or 'shmem'
+method = pulse
+
+# Source for pulse audio. Leave blank for default.
+source = auto
+
+# Method used for alsa. Can be 'default' or 'hw'.
+; method = alsa
+; source = hw:Loopback,1
+
+
+[output]
+# Output method. Can be 'ncurses', 'noncurses', 'raw', 'noritake', 'circle' or 'sdl'.
+method = ncurses
+
+# Visual channels. Can be 'stereo' or 'mono'.
+channels = stereo
+
+# Raw output target. A fifo will be created if it does not exist.
+; raw_target = /dev/stdout
+
+# Raw data format. Can be 'binary' or 'ascii'.
+; data_format = binary
+
+# Binary bit format, can be '8bit' or '16bit'.
+; bit_format = 16bit
+
+# Ascii max value. In 'ascii' mode range will run from 0 to value specified here
+; ascii_max_range = 1000
+
+# Ascii delimiters. In ascii format each bar and frame is separated by a delimiters.
+; bar_delimiter = ;
+; frame_delimiter = \n
+
+
+[color]
+# Colors can be one of seven predefined: black, blue, cyan, green, magenta, red, white, yellow.
+# Or defined by hex code '#xxxxxx' (hex code must be within ''). User defined colors requires
+# a terminal that can change color definitions such as Gnome-terminal or rxvt.
+# default is to keep current terminal color
+; background = default
+; foreground = default
+
+# SDL and sdl_glsl only support hex code colors, these are the default:
+; background = '#111111'
+; foreground = '#33cccc'
+
+# Gradient mode, only hex defined colors (and thereby ncurses mode) are supported,
+# background must also be defined in hex or remain commented out. 1 = on, 0 = off.
+gradient = 1
+
+# Specify the number of colors your gradient will use
+gradient_count = 8
+
+# Specify the gradient colors using Catppuccin Mocha palette
+gradient_color_1 = '#89b4fa'  # Blue
+gradient_color_2 = '#89dceb'  # Sky
+gradient_color_3 = '#94e2d5'  # Teal
+gradient_color_4 = '#a6e3a1'  # Green
+gradient_color_5 = '#f9e2af'  # Yellow
+gradient_color_6 = '#fab387'  # Peach
+gradient_color_7 = '#f5c2e7'  # Pink
+gradient_color_8 = '#cba6f7'  # Mauve
+
+
+[smoothing]
+# Percentage value for integral smoothing. Takes values from 0 - 100.
+# Higher values means smoother, but less responsive.
+integral = 77
+
+# Disables or enables the so-called "Monstercat smoothing" with or without "waves".
+monstercat = 0
+waves = 0
+
+# Set gravity percentage for "drop off". Higher values means bars will drop faster.
+gravity = 100
+
+# In bar height, bars that would have been lower that this will not be drawn.
+ignore = 0
+
+
+[eq]
+# This one is tricky. You can have as much keys as you want.
+# Remember to uncomment more than one key! More keys = more precision.
+# Look at readme.md on github for further explanations and examples.
+; 1 = 1 # bass
+; 2 = 1
+; 3 = 1 # midtone
+; 4 = 1
+; 5 = 1 # treble

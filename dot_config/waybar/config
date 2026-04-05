@@ -1,0 +1,134 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 38,
+    "margin-top": 8,
+    "margin-left": 12,
+    "margin-right": 12,
+    "spacing": 8,
+    
+    "modules-left": ["custom/launcher-workspaces"],
+    "modules-center": ["clock"],
+    "modules-right": ["pulseaudio", "backlight", "network", "bluetooth", "battery", "cpu", "memory", "tray", "custom/notification"],
+    
+    "custom/power": {
+        "format": "",
+        "on-click": "systemctl poweroff",
+        "on-click-right": "systemctl reboot",
+        "tooltip": "Left: Shutdown | Right: Reboot"
+    },
+    
+    "custom/launcher-workspaces": {
+        "format": "  1 2 3 4 5",
+        "on-click": "hyprctl dispatch workspace 1",
+        "on-click-right": "hyprctl dispatch workspace 5",
+        "tooltip": "Arch Linux - Workspaces 1-5"
+    },
+    
+    "hyprland/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "on-click": "activate",
+        "format": "{name}",
+        "format-icons": {
+            "default": ""
+        }
+    },
+    
+    "mpris": {
+        "format": "{player_icon} {title} - {artist}",
+        "format-paused": "{status_icon} <i>{title}</i>",
+        "player-icons": {
+            "default": "<span>󰎆</span>",
+            "spotify": "<span>󰓇</span>",
+            "firefox": "<span>󰈹</span>",
+            "chrome": "<span>󰊯</span>"
+        },
+        "status-icons": {
+            "paused": "<span>󰏤</span>"
+        },
+        "max-length": 35,
+        "on-click": "playerctl play-pause",
+        "on-click-right": "playerctl next",
+        "on-click-middle": "playerctl previous"
+    },
+
+    "clock": {
+        "interval": 60,
+        "format": "󰥔  {:%H:%M  |  %d %b}",
+        "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>"
+    },
+    
+    "pulseaudio": {
+        "format": "{icon} {volume}%",
+        "format-muted": " ",
+        "format-icons": {
+            "default": ["", "", ""]
+        },
+        "on-click": "pavucontrol"
+    },
+    
+    "backlight": {
+        "format": "{icon} {percent}%",
+        "format-icons": ["", "", "", "", "", "", "", "", ""]
+    },
+    
+    "network": {
+        "format-wifi": " ",
+        "format-ethernet": "󰈀 ",
+        "format-disconnected": "󰖪 ",
+        "tooltip-format": "{essid} ({signaldBm}dBm)"
+    },
+    
+    "bluetooth": {
+        "format": "",
+        "format-disabled": "",
+        "format-off": "",
+        "format-on": "",
+        "format-connected": "",
+        "format-connected-battery": " {battery_percentage}%",
+        "on-click": "blueman-manager",
+        "tooltip-format": "{}"
+    },
+    
+    "battery": {
+        "states": {
+            "warning": 30,
+            "critical": 15
+        },
+        "format": "{icon} {capacity}%",
+        "format-charging": "󰂄 {capacity}%",
+        "format-icons": ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰁀", "󰁁", "󰁂", "󰁃"]
+    },
+    
+    "cpu": {
+        "format": "  {usage}%",
+        "tooltip": false
+    },
+    
+    "memory": {
+        "format": "  {}%"
+    },
+    
+    "tray": {
+        "icon-size": 18,
+        "spacing": 10
+    },
+    
+    "custom/notification": {
+        "tooltip": false,
+        "format": "{icon}",
+        "format-icons": {
+            "notification": "<sup></sup>",
+            "none": "",
+            "dnd-notification": "<sup></sup>",
+            "dnd-none": ""
+        },
+        "return-type": "json",
+        "exec-if": "which swaync-client",
+        "exec": "swaync-client -swb",
+        "on-click": "swaync-client -t -sw",
+        "on-click-right": "swaync-client -d -sw",
+        "escape": true
+    }
+}
