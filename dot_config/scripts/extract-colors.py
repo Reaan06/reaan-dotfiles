@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-Extrae colores dominantes de un wallpaper y genera una paleta para Quickshell.
+Extrae colores dominantes de un wallpaper y genera una paleta sobria
+para Quickshell.
 Uso: extract-colors.py <raw_colors_file> <output_palette_file>
      O: pipe hex colors via stdin
 Formato de salida: 8 colores hex separados por espacio:
   pill_bg  accent1  accent2  accent3  accent4  accent5  text  sub
+
+Filosofía: usar los colores REALES del wallpaper, desaturados moderadamente
+para que sean sobrios pero aún reflejen la imagen. Fondo gris oscuro.
 """
 import sys, colorsys, os
 
-FALLBACK = "#1e1e2e #94e2d5 #a6e3a1 #cba6f7 #f9e2af #f38ba8 #cdd6f4 #585b70"
+FALLBACK = "#2a2a2e #8a9a9e #7a8e85 #9490a0 #a09882 #8a7e7a #c8cad0 #5a5a64"
 
 def hex_to_rgb(h):
     h = h.lstrip('#')
@@ -29,32 +33,40 @@ def saturation(h):
     _, _, s = colorsys.rgb_to_hls(r, g, b)
     return s
 
-def darken(h, factor=0.35):
-    r, g, b = hex_to_rgb(h)
-    hl, l, s = colorsys.rgb_to_hls(r, g, b)
-    l = max(0.04, l * factor)
-    r2, g2, b2 = colorsys.hls_to_rgb(hl, l, s)
+def mute(hex_color, sat_factor=0.90, lum_target=0.55):
+    """Mantiene el color del wallpaper, solo normaliza luminancia."""
+    r, g, b = hex_to_rgb(hex_color)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    s = min(0.85, s * sat_factor)
+    l = l * 0.25 + lum_target * 0.75
+    l = max(0.35, min(0.72, l))
+    r2, g2, b2 = colorsys.hls_to_rgb(h, l, s)
     return rgb_to_hex(r2, g2, b2)
 
-def boost(h, sat_factor=1.3, target_lum=0.55):
-    """Boost saturation and normalize luminance for accent vibrancy."""
-    r, g, b = hex_to_rgb(h)
-    hl, l, s = colorsys.rgb_to_hls(r, g, b)
-    s = min(1.0, s * sat_factor)
-    l = min(0.72, max(0.35, l * 0.5 + target_lum * 0.5))
-    r2, g2, b2 = colorsys.hls_to_rgb(hl, l, s)
+def darken_pill(hex_color):
+    """Fondo gris oscuro con tinte visible del color."""
+    r, g, b = hex_to_rgb(hex_color)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    l = 0.14
+    s = min(s * 0.5, 0.22)
+    r2, g2, b2 = colorsys.hls_to_rgb(h, l, s)
     return rgb_to_hex(r2, g2, b2)
 
-def desaturate(h, factor=0.25, target_lum=0.35):
-    r, g, b = hex_to_rgb(h)
-    hl, l, s = colorsys.rgb_to_hls(r, g, b)
-    s = s * factor
-    l = target_lum
-    r2, g2, b2 = colorsys.hls_to_rgb(hl, l, s)
+def make_text(hex_color):
+    """Texto claro con tinte del color dominante."""
+    r, g, b = hex_to_rgb(hex_color)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    r2, g2, b2 = colorsys.hls_to_rgb(h, 0.83, min(s * 0.35, 0.20))
+    return rgb_to_hex(r2, g2, b2)
+
+def make_sub(hex_color):
+    """Subtexto con tinte reconocible del color."""
+    r, g, b = hex_to_rgb(hex_color)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    r2, g2, b2 = colorsys.hls_to_rgb(h, 0.42, min(s * 0.45, 0.22))
     return rgb_to_hex(r2, g2, b2)
 
 def main():
-    # Leer colores desde archivo o stdin
     colors = []
     if len(sys.argv) >= 2 and os.path.isfile(sys.argv[1]):
         with open(sys.argv[1]) as f:
@@ -67,29 +79,28 @@ def main():
     if len(colors) < 4:
         palette = FALLBACK
     else:
-        # Ordenar por luminancia
-        colors.sort(key=luminance)
+        # Ordenar por saturación (los más coloridos primero)
+        mid = sorted(colors, key=saturation, reverse=True)
 
-        darkest = colors[0]
-        lightest = colors[-1]
+        # Filtrar colores muy oscuros o muy claros para los acentos
+        usable = [c for c in mid if 0.08 < luminance(c) < 0.85]
+        if len(usable) < 5:
+            usable = mid  # usar todos si no hay suficientes
 
-        # Colores intermedios ordenados por saturación (más vibrantes primero)
-        mid = sorted(colors[1:-1], key=saturation, reverse=True)
-        while len(mid) < 6:
-            mid.append(mid[-1] if mid else '#888888')
+        # Rellenar si faltan
+        while len(usable) < 6:
+            usable.append(usable[-1] if usable else '#888888')
 
-        # Construir paleta
-        pill = darken(darkest, 0.35)
-        accents = [boost(c) for c in mid[:5]]
+        # Pill: del color más oscuro del wallpaper
+        darkest = sorted(colors, key=luminance)[0]
+        pill = darken_pill(darkest)
 
-        # Asegurar que el texto sea claro
-        if luminance(lightest) < 0.65:
-            text = '#cdd6f4'
-        else:
-            text = lightest
+        # 5 acentos: colores reales del wallpaper, moderadamente desaturados
+        accents = [mute(usable[i]) for i in range(5)]
 
-        # Subtexto: desaturado y oscuro
-        sub = desaturate(mid[-1], factor=0.2, target_lum=0.38)
+        # Texto y sub derivados del acento principal
+        text = make_text(usable[0])
+        sub  = make_sub(usable[0])
 
         palette = f"{pill} {accents[0]} {accents[1]} {accents[2]} {accents[3]} {accents[4]} {text} {sub}"
 

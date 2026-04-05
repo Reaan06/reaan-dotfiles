@@ -15,17 +15,17 @@ Item {
     // Formato de ~/.cache/qs-palette:
     //   pill accent1 accent2 accent3 accent4 accent5 text sub
     // ═══════════════════════════════════════════════
-    property color cPill:    Qt.rgba(0.12, 0.13, 0.16, 0.92)
-    property color cHover:   Qt.rgba(0.18, 0.19, 0.24, 0.95)
-    property color cText:    "#cdd6f4"
-    property color cSub:     "#585b70"
-    property color cTeal:    "#94e2d5"
-    property color cGreen:   "#a6e3a1"
-    property color cMauve:   "#cba6f7"
-    property color cYellow:  "#f9e2af"
-    property color cRed:     "#f38ba8"
-    property color cBlue:    "#89b4fa"
-    property color cPeach:   "#fab387"
+    property color cPill:    Qt.rgba(0.16, 0.16, 0.18, 0.92)
+    property color cHover:   Qt.rgba(0.22, 0.22, 0.25, 0.95)
+    property color cText:    "#c8cad0"
+    property color cSub:     "#5a5a64"
+    property color cTeal:    "#8a9a9e"
+    property color cGreen:   "#7a8e85"
+    property color cMauve:   "#9490a0"
+    property color cYellow:  "#a09882"
+    property color cRed:     "#8a7e7a"
+    property color cBlue:    "#8a9a9e"
+    property color cPeach:   "#a09882"
     readonly property string font:    "JetBrains Mono Nerd Font"
 
     // ═══════════════════════════════════════════════
@@ -233,14 +233,14 @@ Item {
         anchors.rightMargin: 4
         spacing: 8
 
-        // ──────── 1. LOGO DISTRO ────────
+        // ──────── 1. LOGO DISTRO (color fijo) ────────
         Pill {
             pillColor: root.cPill; hoverColor: root.cHover; hPad: 12
             onClicked: aRofi.running = true
             Text {
                 text: root.distroIcon()
                 font.family: root.font; font.pixelSize: 20
-                color: root.cBlue
+                color: "#89b4fa"
             }
         }
 
@@ -399,20 +399,10 @@ Item {
                         required property var modelData
                         width: 30; height: 36
                         Image {
-                            id: trayIcon
                             anchors.centerIn: parent
                             width: 16; height: 16
                             source: modelData.icon
                             sourceSize.width: 16; sourceSize.height: 16
-                            cache: false
-                            visible: status === Image.Ready
-                        }
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData.title ? modelData.title.charAt(0).toUpperCase() : "•"
-                            font.family: root.font; font.pixelSize: 11
-                            color: root.cSub
-                            visible: trayIcon.status !== Image.Ready
                         }
                         MouseArea {
                             anchors.fill: parent; cursorShape: Qt.PointingHandCursor

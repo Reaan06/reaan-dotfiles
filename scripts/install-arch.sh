@@ -106,6 +106,9 @@ CORE=(
     # Gestor de pantallas + Imagemagick (colores dinámicos)
     nwg-displays imagemagick jq
 
+    # Wallpaper picker GUI (GTK4 + Libadwaita)
+    python-gobject gtk4 libadwaita
+
     # Bluetooth
     bluez bluez-utils blueman
 
@@ -153,8 +156,9 @@ ok "Todos los paquetes instalados"
 header "Desplegando Dotfiles"
 
 # Directorios destino
-mkdir -p ~/.config/{hypr,quickshell/components,kitty,rofi,swaync,nvim,cava,scripts}
+mkdir -p ~/.config/{hypr,quickshell/components,kitty,rofi,swaync,nvim,cava,scripts,qt6ct}
 mkdir -p ~/.local/bin ~/Pictures/{Screenshots,wallpapers}
+mkdir -p ~/.cache
 
 # Mapa de configs: origen (relativo a DOTFILES_DIR) → destino
 deploy() {
@@ -180,6 +184,7 @@ deploy "dot_config/swaync"      "$HOME/.config/swaync"
 deploy "dot_config/nvim"        "$HOME/.config/nvim"
 deploy "dot_config/cava"        "$HOME/.config/cava"
 deploy "dot_config/scripts"     "$HOME/.config/scripts"
+deploy "dot_config/qt6ct"       "$HOME/.config/qt6ct"
 deploy "dot_zshrc"              "$HOME/.zshrc"
 
 # Power menu script
@@ -212,6 +217,7 @@ fi
 
 # Permisos de ejecución
 chmod +x "$HOME/.config/scripts/"*.sh 2>/dev/null || true
+chmod +x "$HOME/.config/scripts/"*.py 2>/dev/null || true
 chmod +x "$HOME/.config/hypr/scripts/"*.sh 2>/dev/null || true
 
 # Wallpapers
@@ -222,6 +228,29 @@ fi
 
 # Monitor config por defecto
 [ -f ~/.config/hypr/monitors.conf ] || echo "monitor=,preferred,auto,1" > ~/.config/hypr/monitors.conf
+
+# Generar paleta inicial desde wallpaper por defecto
+if [ -f "$HOME/.config/scripts/extract-colors.py" ] && command -v magick &>/dev/null; then
+    info "Generando paleta de colores inicial..."
+    DEFAULT_WP=$(ls ~/Pictures/wallpapers/*.{jpg,jpeg,png,webp} 2>/dev/null | head -1)
+    if [ -n "$DEFAULT_WP" ]; then
+        RAW=/tmp/qs-colors-raw
+        magick "$DEFAULT_WP" -resize 200x200! -colors 8 -unique-colors -depth 8 txt:- 2>/dev/null \
+            | tail -n +2 | grep -oE '#[0-9A-Fa-f]{6}' | head -8 > "$RAW"
+        python3 "$HOME/.config/scripts/extract-colors.py" "$RAW" "$HOME/.cache/qs-palette" 2>/dev/null
+        rm -f "$RAW"
+        MONITOR=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name' 2>/dev/null || echo 'eDP-1')
+        cat > "$HOME/.config/hypr/hyprpaper.conf" <<WPEOF
+wallpaper {
+    monitor = $MONITOR
+    path = $DEFAULT_WP
+}
+WPEOF
+        ok "Paleta y wallpaper configurados"
+    else
+        warn "No hay wallpapers en ~/Pictures/wallpapers/ — paleta por defecto"
+    fi
+fi
 
 ok "Dotfiles desplegados"
 

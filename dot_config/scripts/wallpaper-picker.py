@@ -119,20 +119,22 @@ class WallpaperPicker(Adw.Application):
 
     def apply_wallpaper(self, path):
         try:
+            import time
+            # 1. Detectar monitor
             monitor = subprocess.check_output(
                 ["sh", "-c", "hyprctl monitors -j | jq -r '.[0].name'"],
-                text=True).strip()
-            try:
-                subprocess.check_output(["pgrep", "-x", "hyprpaper"])
-            except subprocess.CalledProcessError:
-                subprocess.Popen(["hyprpaper"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                import time; time.sleep(1)
-            subprocess.run(["hyprctl", "hyprpaper", "unload", "all"], capture_output=True)
-            subprocess.run(["hyprctl", "hyprpaper", "preload", path], capture_output=True)
-            subprocess.run(["hyprctl", "hyprpaper", "wallpaper", f"{monitor},{path}"],
-                           capture_output=True)
+                text=True).strip() or "eDP-1"
+
+            # 2. Escribir config de hyprpaper (formato v0.8.x)
             with open(HYPRPAPER_CONF, "w") as f:
-                f.write(f"preload = {path}\nwallpaper = ,{path}\nsplash = false\nipc = on\n")
+                f.write(f"wallpaper {{\n    monitor = {monitor}\n    path = {path}\n}}\n")
+
+            # 3. Reiniciar hyprpaper con la nueva config
+            subprocess.run(["pkill", "hyprpaper"], capture_output=True)
+            time.sleep(0.3)
+            subprocess.Popen(["hyprpaper"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            # 3. Extraer colores y generar paleta
             raw_file = "/tmp/qs-colors-raw"
             subprocess.run(
                 ["sh", "-c",
@@ -144,6 +146,7 @@ class WallpaperPicker(Adw.Application):
                                capture_output=True)
                 try: os.remove(raw_file)
                 except: pass
+
             subprocess.run(["notify-send", "Wallpaper actualizado",
                             os.path.basename(path), "-i", path, "-t", "3000"],
                            capture_output=True)
