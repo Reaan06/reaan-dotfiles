@@ -44,7 +44,14 @@ Item {
     property string sDistro:  ""
     property string sKbLang:  "EN"
 
-    readonly property var player: Mpris.players.count > 0 ? Mpris.players.values[0] : null
+    // MPRIS state via playerctl (reliable fallback for Qt version mismatch)
+    property string mpTitle: ""
+    property string mpArtist: ""
+    property string mpArtUrl: ""
+    property bool   mpPlaying: false
+    property int    mpPos: 0
+    property int    mpLen: 0
+    property bool   mpActive: false
 
     // ═══════════════════════════════════════════════
     // PROCESOS DE ESTADO
@@ -153,10 +160,38 @@ Item {
     }
     Timer { interval: 900000; running: true; repeat: true; triggeredOnStart: true; onTriggered: weatherProc.running = true }
 
+    // MPRIS via playerctl
+    Process {
+        id: mprisProc
+        command: ["sh", "-c", "playerctl metadata --format '{{status}}\n{{title}}\n{{artist}}\n{{mpris:artUrl}}\n{{position}}\n{{mpris:length}}' 2>/dev/null || echo 'Stopped'"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = text.trim().split("\n")
+                if (lines.length >= 1 && lines[0] !== "Stopped" && lines[0] !== "No players found") {
+                    root.mpActive = true
+                    root.mpPlaying = (lines[0] === "Playing")
+                    root.mpTitle = lines.length > 1 ? lines[1] : ""
+                    root.mpArtist = lines.length > 2 ? lines[2] : ""
+                    root.mpArtUrl = lines.length > 3 ? lines[3] : ""
+                    var pos = lines.length > 4 ? parseInt(lines[4]) : 0
+                    var len = lines.length > 5 ? parseInt(lines[5]) : 0
+                    root.mpPos = isNaN(pos) ? 0 : Math.floor(pos / 1000000)
+                    root.mpLen = isNaN(len) ? 0 : Math.floor(len / 1000000)
+                } else {
+                    root.mpActive = false
+                }
+            }
+        }
+    }
+    Timer { interval: 1000; running: true; repeat: true; triggeredOnStart: true; onTriggered: mprisProc.running = true }
+
     // Acciones one-shot
     Process { id: aRofi;   command: ["rofi", "-show", "drun"] }
     Process { id: aPower;  command: ["sh", "-c", "~/.config/scripts/powermenu.sh"] }
     Process { id: aPavu;   command: ["pavucontrol"] }
+    Process { id: aMpNext;  command: ["playerctl", "next"] }
+    Process { id: aMpPrev;  command: ["playerctl", "previous"] }
+    Process { id: aMpToggle; command: ["playerctl", "play-pause"] }
     Process { id: aBtMan;  command: ["blueman-manager"] }
     Process { id: aNmEdit; command: ["nm-connection-editor"] }
     Process { id: aVolUp;  command: ["pamixer", "-i", "5"] }
@@ -282,7 +317,7 @@ Item {
 
         // ──────── 3. MPRIS — art + artista - título + controles ────────
         Pill {
-            visible: root.player !== null
+            visible: root.mpActive
             pillColor: root.cPill; hoverColor: root.cHover; hPad: 8
 
             // Carátula del álbum (cuadrada, redondeada)
@@ -292,29 +327,34 @@ Item {
                 clip: true
                 Image {
                     anchors.fill: parent
-                    source: root.player ? root.player.trackArtUrl : ""
+                    source: root.mpArtUrl
                     fillMode: Image.PreserveAspectCrop
                     visible: status === Image.Ready
                 }
-                // Fallback: icono de música si no hay carátula
                 Text {
                     anchors.centerIn: parent
                     text: "󰎆"
                     font.family: root.font; font.pixelSize: 14; color: root.cGreen
-                    visible: root.player ? root.player.trackArtUrl === "" : true
+                    visible: root.mpArtUrl.length === 0
                 }
             }
 
             // Artista - Título
             Text {
                 text: {
-                    if (!root.player) return ""
-                    var a = root.player.trackArtist || ""
-                    var t = root.player.trackTitle || ""
+                    var a = root.mpArtist
+                    var t = root.mpTitle
                     var full = a.length > 0 ? a + " - " + t : t
-                    return root.truncate(full, 25)
+                    return root.truncate(full, 20)
                 }
                 font.family: root.font; font.pixelSize: 11; color: root.cText
+            }
+
+            // Posición / Duración
+            Text {
+                visible: root.mpLen > 0
+                text: root.fmtTime(root.mpPos) + " / " + root.fmtTime(root.mpLen)
+                font.family: root.font; font.pixelSize: 10; color: root.cSub
             }
 
             Rectangle { width: 1; height: 14; color: Qt.rgba(1,1,1,0.08) }
@@ -325,15 +365,15 @@ Item {
                 font.family: root.font; font.pixelSize: 14; color: root.cSub
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: { if (root.player) root.player.previous() }
+                    onClicked: aMpPrev.running = true
                 }
             }
             Text {
-                text: root.player && root.player.isPlaying ? "󰏦" : "󰐍"
+                text: root.mpPlaying ? "󰏦" : "󰐍"
                 font.family: root.font; font.pixelSize: 16; color: root.cTeal
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: { if (root.player) root.player.togglePlaying() }
+                    onClicked: aMpToggle.running = true
                 }
             }
             Text {
@@ -341,19 +381,8 @@ Item {
                 font.family: root.font; font.pixelSize: 14; color: root.cSub
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: { if (root.player) root.player.next() }
+                    onClicked: aMpNext.running = true
                 }
-            }
-
-            Rectangle { width: 1; height: 14; color: Qt.rgba(1,1,1,0.08) }
-
-            // Posición / Duración
-            Text {
-                text: {
-                    if (!root.player || !root.player.lengthSupported) return ""
-                    return root.fmtTime(root.player.position) + " / " + root.fmtTime(root.player.length)
-                }
-                font.family: root.font; font.pixelSize: 10; color: root.cSub
             }
         }
 
@@ -438,21 +467,14 @@ Item {
                 }
                 Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
 
-                // — WiFi —
+                // — WiFi (icon only) —
                 Item {
-                    width: wifiContent.implicitWidth + 16; height: 36
-                    Row {
-                        id: wifiContent; anchors.centerIn: parent; spacing: 4
-                        Text {
-                            text: root.sNet.length > 0 ? "󰖩" : "󰖪"
-                            font.family: root.font; font.pixelSize: 14
-                            color: root.sNet.length > 0 ? root.cGreen : root.cSub
-                        }
-                        Text {
-                            visible: root.sNet.length > 0
-                            text: root.truncate(root.sNet, 12)
-                            font.family: root.font; font.pixelSize: 11; color: root.cGreen
-                        }
+                    width: 30; height: 36
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.sNet.length > 0 ? "󰖩" : "󰖪"
+                        font.family: root.font; font.pixelSize: 14
+                        color: root.sNet.length > 0 ? root.cGreen : root.cSub
                     }
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -461,21 +483,14 @@ Item {
                 }
                 Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
 
-                // — Bluetooth —
+                // — Bluetooth (icon only) —
                 Item {
-                    width: btContent.implicitWidth + 16; height: 36
-                    Row {
-                        id: btContent; anchors.centerIn: parent; spacing: 4
-                        Text {
-                            text: root.sBt.length > 0 ? "󰂱" : "󰂲"
-                            font.family: root.font; font.pixelSize: 14
-                            color: root.sBt.length > 0 ? root.cBlue : root.cSub
-                        }
-                        Text {
-                            visible: root.sBt.length > 0
-                            text: root.truncate(root.sBt, 12)
-                            font.family: root.font; font.pixelSize: 11; color: root.cBlue
-                        }
+                    width: 30; height: 36
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.sBt.length > 0 ? "󰂱" : "󰂲"
+                        font.family: root.font; font.pixelSize: 14
+                        color: root.sBt.length > 0 ? root.cBlue : root.cSub
                     }
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -495,21 +510,14 @@ Item {
                 }
                 Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
 
-                // — Brillo —
+                // — Brillo (icon only) —
                 Item {
-                    width: briContent.implicitWidth + 12; height: 36
-                    Row {
-                        id: briContent; anchors.centerIn: parent; spacing: 4
-                        Text {
-                            text: root.sBri > 70 ? "󰃠" : root.sBri > 30 ? "󰃟" : "󰃞"
-                            font.family: root.font; font.pixelSize: 14
-                            color: root.cPeach
-                        }
-                        Text {
-                            text: root.sBri + "%"
-                            font.family: root.font; font.pixelSize: 11
-                            color: root.cPeach
-                        }
+                    width: 30; height: 36
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.sBri > 70 ? "󰃠" : root.sBri > 30 ? "󰃟" : "󰃞"
+                        font.family: root.font; font.pixelSize: 14
+                        color: root.cPeach
                     }
                 }
                 Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
