@@ -1,33 +1,40 @@
 #!/bin/bash
-# wsaction.sh — Per-monitor workspace groups (Caelestia-style)
-# Cada monitor tiene su propio grupo de 10 workspaces:
-#   Monitor 1: WS 1-10, Monitor 2: WS 11-20, Monitor 3: WS 21-30...
+# wsaction.sh — Per-monitor workspace groups
+# eDP-1: WS 1-7 | HDMI-A-1: WS 11-17
 #
-# Uso: wsaction.sh [-g] <dispatcher> <workspace_number>
-#   wsaction.sh workspace 3          → WS 3 del grupo actual (dentro del monitor)
-#   wsaction.sh movetoworkspace 5    → mueve ventana al WS 5 del grupo
-#   wsaction.sh -g workspace 2       → va al grupo 2 (monitor 2), mismo WS relativo
-
-GROUP_MODE=false
-if [ "$1" = "-g" ]; then
-    GROUP_MODE=true
-    shift
-fi
+# Uso: wsaction.sh <dispatcher> <number|prev|next>
+#   wsaction.sh workspace 3          → WS 3 o 13 según el monitor enfocado
+#   wsaction.sh workspace next       → siguiente WS dentro del grupo
+#   wsaction.sh movetoworkspace 5    → mueve ventana al WS 5 o 15
 
 DISPATCHER="$1"
 TARGET="$2"
+MAX_PER_GROUP=7
 
+# Get current workspace and calculate group
 ACTIVE_WS=$(hyprctl activeworkspace -j | jq -r '.id')
+GROUP=$(( (ACTIVE_WS - 1) / 10 * 10 ))
+GROUP_MIN=$(( GROUP + 1 ))
+GROUP_MAX=$(( GROUP + MAX_PER_GROUP ))
 
-if [ "$GROUP_MODE" = true ]; then
-    # -g: mover entre grupos (monitores), mantener posición relativa dentro del grupo
-    # Fórmula: (target_group - 1) * 10 + (activeWS % 10)
-    REAL_WS=$(( (TARGET - 1) * 10 + (ACTIVE_WS - 1) % 10 + 1 ))
+# Calculate target workspace
+case "$TARGET" in
+    next)
+        REAL_WS=$(( ACTIVE_WS + 1 ))
+        [ "$REAL_WS" -gt "$GROUP_MAX" ] && REAL_WS="$GROUP_MIN"
+        ;;
+    prev)
+        REAL_WS=$(( ACTIVE_WS - 1 ))
+        [ "$REAL_WS" -lt "$GROUP_MIN" ] && REAL_WS="$GROUP_MAX"
+        ;;
+    *)
+        REAL_WS=$(( GROUP + TARGET ))
+        ;;
+esac
+
+# Dispatch
+if [ "$DISPATCHER" = "workspace" ]; then
+    hyprctl dispatch focusworkspaceoncurrentmonitor "$REAL_WS"
 else
-    # Normal: mover dentro del grupo actual
-    # Fórmula: floor((activeWS - 1) / 10) * 10 + target
-    GROUP=$(( (ACTIVE_WS - 1) / 10 * 10 ))
-    REAL_WS=$(( GROUP + TARGET ))
+    hyprctl dispatch movetoworkspacesilent "$REAL_WS"
 fi
-
-hyprctl dispatch "$DISPATCHER" "$REAL_WS"
