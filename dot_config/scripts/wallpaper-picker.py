@@ -18,6 +18,7 @@ THUMB_W, THUMB_H = 460, 300
 EXTRACT_SCRIPT = os.path.expanduser("~/.config/scripts/extract-colors.py")
 HYPRPAPER_CONF = os.path.expanduser("~/.config/hypr/hyprpaper.conf")
 PALETTE_CACHE = os.path.expanduser("~/.cache/qs-palette")
+STATE_FILE = os.path.expanduser("~/.config/hypr/wallpaper-state.conf")
 
 CSS = """
 window.background, .main-box {
@@ -117,24 +118,74 @@ class WallpaperPicker(Adw.Application):
                 unique.append(rp)
         return unique
 
+    def load_wallpaper_state(self):
+        """Load saved wallpaper-per-monitor state from persistent file."""
+        state = {}
+        if os.path.isfile(STATE_FILE):
+            with open(STATE_FILE, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line:
+                        mon, wp = line.split("=", 1)
+                        state[mon.strip()] = wp.strip()
+        return state
+
+    def save_wallpaper_state(self, state):
+        """Save wallpaper-per-monitor state to persistent file."""
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        with open(STATE_FILE, "w") as f:
+            for mon, wp in state.items():
+                f.write(f"{mon}={wp}\n")
+
+    def write_hyprpaper_conf(self, state):
+        """Write hyprpaper.conf with all monitors' wallpapers (v0.8.x format)."""
+        with open(HYPRPAPER_CONF, "w") as f:
+            for mon, wp in state.items():
+                f.write(f"wallpaper {{\n    monitor = {mon}\n    path = {wp}\n}}\n\n")
+
+    def restart_hyprpaper(self):
+        """Kill and restart hyprpaper."""
+        import time
+        subprocess.run(["pkill", "-x", "hyprpaper"], capture_output=True)
+        time.sleep(0.4)
+        subprocess.Popen(["hyprpaper"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def apply_wallpaper(self, path):
         try:
-            import time
-            # 1. Detectar monitor
-            monitor = subprocess.check_output(
-                ["sh", "-c", "hyprctl monitors -j | jq -r '.[0].name'"],
-                text=True).strip() or "eDP-1"
+            import json, time
 
-            # 2. Escribir config de hyprpaper (formato v0.8.x)
-            with open(HYPRPAPER_CONF, "w") as f:
-                f.write(f"wallpaper {{\n    monitor = {monitor}\n    path = {path}\n}}\n")
+            # 1. Detect FOCUSED monitor
+            monitors_json = subprocess.check_output(
+                ["hyprctl", "monitors", "-j"], text=True)
+            monitors = json.loads(monitors_json)
+            focused_mon = None
+            all_mons = []
+            for m in monitors:
+                all_mons.append(m["name"])
+                if m.get("focused", False):
+                    focused_mon = m["name"]
+            if not focused_mon:
+                focused_mon = all_mons[0] if all_mons else "eDP-1"
 
-            # 3. Reiniciar hyprpaper con la nueva config
-            subprocess.run(["pkill", "hyprpaper"], capture_output=True)
-            time.sleep(0.3)
-            subprocess.Popen(["hyprpaper"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # 2. Load existing state, update focused monitor's wallpaper
+            state = self.load_wallpaper_state()
+            state[focused_mon] = path
 
-            # 3. Extraer colores y generar paleta
+            # Ensure all connected monitors have a wallpaper
+            for mon in all_mons:
+                if mon not in state:
+                    state[mon] = path
+
+            # 3. Save persistent state
+            self.save_wallpaper_state(state)
+
+            # 4. Write hyprpaper.conf with ALL monitors
+            self.write_hyprpaper_conf(state)
+
+            # 5. Restart hyprpaper
+            self.restart_hyprpaper()
+
+            # 6. Extract colors and generate palette
             raw_file = "/tmp/qs-colors-raw"
             subprocess.run(
                 ["sh", "-c",
@@ -147,8 +198,9 @@ class WallpaperPicker(Adw.Application):
                 try: os.remove(raw_file)
                 except: pass
 
-            subprocess.run(["notify-send", "Wallpaper actualizado",
-                            os.path.basename(path), "-i", path, "-t", "3000"],
+            subprocess.run(["notify-send", "Wallpaper",
+                            f"{os.path.basename(path)} → {focused_mon}",
+                            "-i", path, "-t", "3000"],
                            capture_output=True)
         except Exception as e:
             print(f"Error: {e}")
@@ -317,15 +369,21 @@ class WallpaperPicker(Adw.Application):
     def on_click(self, flow, child):
         card = child.get_child()
         if hasattr(card, "_wp"):
-            threading.Thread(target=self.apply_wallpaper, args=(card._wp,), daemon=True).start()
-            GLib.timeout_add(350, self.win.close)
+            subprocess.Popen(
+                [os.path.expanduser("~/.config/scripts/apply-wallpaper.sh"), card._wp],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True)
+            self.win.close()
 
     def on_random(self, btn):
         import random
         if self.filtered:
             path = random.choice(self.filtered)
-            threading.Thread(target=self.apply_wallpaper, args=(path,), daemon=True).start()
-            GLib.timeout_add(350, self.win.close)
+            subprocess.Popen(
+                [os.path.expanduser("~/.config/scripts/apply-wallpaper.sh"), path],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True)
+            self.win.close()
 
     def on_search(self, entry):
         txt = entry.get_text().lower().strip()

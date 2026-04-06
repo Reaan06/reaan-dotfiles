@@ -1,0 +1,98 @@
+/* ═══════════════════════════════════════════════════
+   Power Menu — Glassmorphism · Catppuccin Mocha
+   ═══════════════════════════════════════════════════ */
+
+* {
+    font:                        "JetBrainsMono Nerd Font 13";
+    background:                  rgba(17, 17, 27, 0.88);
+    background-alt:              rgba(49, 50, 68, 0.45);
+    foreground:                  #CDD6F4;
+    foreground-alt:              #6C7086;
+    selected:                    rgba(137, 180, 250, 0.18);
+    selected-text:               #89B4FA;
+    border-col:                  rgba(137, 180, 250, 0.20);
+}
+
+window {
+    transparency:                "real";
+    location:                    center;
+    anchor:                      center;
+    fullscreen:                  false;
+    width:                       320px;
+    border-radius:               20px;
+    border:                      1px solid;
+    border-color:                @border-col;
+    background-color:            @background;
+    cursor:                      "default";
+}
+
+mainbox {
+    enabled:                     true;
+    spacing:                     0px;
+    padding:                     0px;
+    background-color:            transparent;
+    children:                    [ "message", "listview" ];
+}
+
+message {
+    enabled:                     true;
+    padding:                     22px 20px 10px 20px;
+    background-color:            transparent;
+}
+
+textbox {
+    font:                        "JetBrainsMono Nerd Font Bold 11";
+    background-color:            transparent;
+    text-color:                  @foreground-alt;
+    vertical-align:              0.5;
+    horizontal-align:            0.5;
+}
+
+inputbar {
+    enabled:                     false;
+}
+
+listview {
+    enabled:                     true;
+    columns:                     1;
+    lines:                       5;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+    spacing:                     6px;
+    padding:                     4px 16px 16px 16px;
+    background-color:            transparent;
+    cursor:                      "default";
+}
+
+element {
+    enabled:                     true;
+    padding:                     14px 18px;
+    border-radius:               12px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    orientation:                 horizontal;
+    cursor:                      pointer;
+}
+
+element selected.normal {
+    background-color:            @selected;
+    text-color:                  @selected-text;
+}
+
+element-icon {
+    enabled:                     false;
+}
+
+element-text {
+    background-color:            transparent;
+    text-color:                  inherit;
+    vertical-align:              0.5;
+    horizontal-align:            0.0;
+    cursor:                      inherit;
+    markup:                      true;
+}
