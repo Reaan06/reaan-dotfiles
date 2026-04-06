@@ -98,7 +98,7 @@ CORE=(
     rofi-wayland
 
     # Wallpaper + Screenshots
-    hyprpaper grim slurp swappy
+    swaybg grim slurp swappy
 
     # Audio / Brillo
     pavucontrol playerctl brightnessctl pamixer light

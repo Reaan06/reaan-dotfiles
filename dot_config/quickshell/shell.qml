@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Io
 import QtQuick
 
 // Punto de entrada de Quickshell.
@@ -8,6 +9,14 @@ import QtQuick
 // de vida automáticamente.
 
 ShellRoot {
+    // ── Global: start MPRIS follow daemon (once, not per-monitor) ──
+    Process {
+        id: mprisStart
+        command: ["sh", "-c", "~/.config/scripts/mpris-follow.sh &"]
+    }
+    Component.onCompleted: mprisStart.running = true
+
+    // ── Top bar (one per monitor) ──
     Variants {
         model: Quickshell.screens
 
@@ -34,6 +43,38 @@ ShellRoot {
             color: "transparent"
 
             StatusBar {
+                anchors.fill: parent
+            }
+        }
+    }
+
+    // ── OSD overlay (volume/brightness, right edge, one per monitor) ──
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: osdWin
+
+            property var modelData
+            screen: modelData
+
+            anchors {
+                top: true
+                right: true
+                bottom: true
+            }
+
+            margins {
+                top: 60
+                right: 12
+                bottom: 60
+            }
+
+            exclusionMode: ExclusionMode.Ignore
+            implicitWidth: 56
+            color: "transparent"
+
+            Osd {
                 anchors.fill: parent
             }
         }

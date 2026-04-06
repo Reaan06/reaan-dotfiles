@@ -44,7 +44,7 @@ Item {
     property string sDistro:  ""
     property string sKbLang:  "EN"
 
-    // MPRIS state via playerctl (reliable fallback for Qt version mismatch)
+    // MPRIS state via playerctl
     property string mpTitle: ""
     property string mpArtist: ""
     property string mpArtUrl: ""
@@ -52,6 +52,14 @@ Item {
     property int    mpPos: 0
     property int    mpLen: 0
     property bool   mpActive: false
+    property string _mpPrevTitle: ""
+    property real   mpInfoOpacity: 1.0
+
+    // Live position ticker — increments every second while playing
+    Timer {
+        interval: 1000; running: root.mpPlaying && root.mpActive; repeat: true
+        onTriggered: { if (root.mpPos < root.mpLen) root.mpPos++ }
+    }
 
     // ═══════════════════════════════════════════════
     // PROCESOS DE ESTADO
@@ -160,30 +168,53 @@ Item {
     }
     Timer { interval: 900000; running: true; repeat: true; triggeredOnStart: true; onTriggered: weatherProc.running = true }
 
-    // MPRIS via playerctl
+    // MPRIS — read output from mpris-follow.sh (started globally in shell.qml)
     Process {
         id: mprisProc
-        command: ["sh", "-c", "playerctl metadata --format '{{status}}\n{{title}}\n{{artist}}\n{{mpris:artUrl}}\n{{position}}\n{{mpris:length}}' 2>/dev/null || echo 'Stopped'"]
+        command: ["cat", "/tmp/qs-mpris"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var lines = text.trim().split("\n")
-                if (lines.length >= 1 && lines[0] !== "Stopped" && lines[0] !== "No players found") {
+                if (lines.length >= 2 && lines[0] !== "Stopped" && lines[0] !== "") {
                     root.mpActive = true
                     root.mpPlaying = (lines[0] === "Playing")
-                    root.mpTitle = lines.length > 1 ? lines[1] : ""
-                    root.mpArtist = lines.length > 2 ? lines[2] : ""
-                    root.mpArtUrl = lines.length > 3 ? lines[3] : ""
+                    var newTitle = lines.length > 1 ? lines[1] : ""
+                    var newArtist = lines.length > 2 ? lines[2] : ""
+                    var newArtUrl = lines.length > 3 ? lines[3] : ""
                     var pos = lines.length > 4 ? parseInt(lines[4]) : 0
                     var len = lines.length > 5 ? parseInt(lines[5]) : 0
-                    root.mpPos = isNaN(pos) ? 0 : Math.floor(pos / 1000000)
-                    root.mpLen = isNaN(len) ? 0 : Math.floor(len / 1000000)
+                    pos = isNaN(pos) ? 0 : pos
+                    len = isNaN(len) ? 0 : len
+
+                    // Detect song change → trigger fade animation
+                    if (newTitle !== root.mpTitle || newArtist !== root.mpArtist) {
+                        root.mpInfoOpacity = 0.0
+                        root._mpPrevTitle = root.mpTitle
+                        root.mpTitle = newTitle
+                        root.mpArtist = newArtist
+                        root.mpArtUrl = newArtUrl
+                        root.mpPos = pos
+                        root.mpLen = len
+                        mpFadeIn.start()
+                    } else {
+                        // Sync position only if drift > 3s (let local timer handle ticking)
+                        if (Math.abs(pos - root.mpPos) > 3) root.mpPos = pos
+                        root.mpLen = len
+                    }
                 } else {
                     root.mpActive = false
                 }
             }
         }
     }
-    Timer { interval: 1000; running: true; repeat: true; triggeredOnStart: true; onTriggered: mprisProc.running = true }
+    Timer { interval: 250; running: true; repeat: true; triggeredOnStart: true; onTriggered: mprisProc.running = true }
+
+    // Fade-in animation for song changes
+    SequentialAnimation {
+        id: mpFadeIn
+        PauseAnimation { duration: 50 }
+        NumberAnimation { target: root; property: "mpInfoOpacity"; to: 1.0; duration: 300; easing.type: Easing.OutCubic }
+    }
 
     // Acciones one-shot
     Process { id: aRofi;   command: ["rofi", "-show", "drun"] }
@@ -315,21 +346,23 @@ Item {
             }
         }
 
-        // ──────── 3. MPRIS — art + artista - título + controles ────────
+        // ──────── 3. MPRIS — art | info(2 líneas) | controles ────────
         Pill {
             visible: root.mpActive
             pillColor: root.cPill; hoverColor: root.cHover; hPad: 8
 
-            // Carátula del álbum (cuadrada, redondeada)
+            // Carátula del álbum
             Rectangle {
                 width: 28; height: 28; radius: 6
                 color: Qt.rgba(1,1,1,0.05)
                 clip: true
+                opacity: root.mpInfoOpacity
                 Image {
                     anchors.fill: parent
                     source: root.mpArtUrl
                     fillMode: Image.PreserveAspectCrop
                     visible: status === Image.Ready
+                    Behavior on source { PropertyAnimation { duration: 0 } }
                 }
                 Text {
                     anchors.centerIn: parent
@@ -339,49 +372,55 @@ Item {
                 }
             }
 
-            // Artista - Título
-            Text {
-                text: {
-                    var a = root.mpArtist
-                    var t = root.mpTitle
-                    var full = a.length > 0 ? a + " - " + t : t
-                    return root.truncate(full, 20)
+            // Info: título arriba, duración abajo
+            Column {
+                spacing: 1
+                opacity: root.mpInfoOpacity
+                Text {
+                    id: mpTitleText
+                    text: {
+                        var a = root.mpArtist
+                        var t = root.mpTitle
+                        var full = a.length > 0 ? a + " - " + t : t
+                        return root.truncate(full, 22)
+                    }
+                    font.family: root.font; font.pixelSize: 11; color: root.cText
                 }
-                font.family: root.font; font.pixelSize: 11; color: root.cText
-            }
-
-            // Posición / Duración
-            Text {
-                visible: root.mpLen > 0
-                text: root.fmtTime(root.mpPos) + " / " + root.fmtTime(root.mpLen)
-                font.family: root.font; font.pixelSize: 10; color: root.cSub
-            }
-
-            Rectangle { width: 1; height: 14; color: Qt.rgba(1,1,1,0.08) }
-
-            // Controles de transporte
-            Text {
-                text: "󰒮"
-                font.family: root.font; font.pixelSize: 14; color: root.cSub
-                MouseArea {
-                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: aMpPrev.running = true
+                Text {
+                    visible: root.mpLen > 0
+                    text: root.fmtTime(root.mpPos) + " / " + root.fmtTime(root.mpLen)
+                    font.family: root.font; font.pixelSize: 9; color: root.cSub
                 }
             }
-            Text {
-                text: root.mpPlaying ? "󰏦" : "󰐍"
-                font.family: root.font; font.pixelSize: 16; color: root.cTeal
-                MouseArea {
-                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: aMpToggle.running = true
+
+            Rectangle { width: 1; height: 20; color: Qt.rgba(1,1,1,0.08) }
+
+            // Controles centrados
+            Row {
+                spacing: 8
+                Text {
+                    text: "󰒮"
+                    font.family: root.font; font.pixelSize: 14; color: root.cSub
+                    MouseArea {
+                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        onClicked: aMpPrev.running = true
+                    }
                 }
-            }
-            Text {
-                text: "󰒭"
-                font.family: root.font; font.pixelSize: 14; color: root.cSub
-                MouseArea {
-                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: aMpNext.running = true
+                Text {
+                    text: root.mpPlaying ? "󰏦" : "󰐍"
+                    font.family: root.font; font.pixelSize: 18; color: root.cTeal
+                    MouseArea {
+                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        onClicked: aMpToggle.running = true
+                    }
+                }
+                Text {
+                    text: "󰒭"
+                    font.family: root.font; font.pixelSize: 14; color: root.cSub
+                    MouseArea {
+                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        onClicked: aMpNext.running = true
+                    }
                 }
             }
         }
@@ -506,42 +545,6 @@ Item {
                         id: batContent; anchors.centerIn: parent; spacing: 4
                         Text { text: root.batIcon(); font.family: root.font; font.pixelSize: 14; color: root.batColor() }
                         Text { text: root.sBat + "%"; font.family: root.font; font.pixelSize: 11; color: root.batColor() }
-                    }
-                }
-                Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
-
-                // — Brillo (icon only) —
-                Item {
-                    width: 30; height: 36
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.sBri > 70 ? "󰃠" : root.sBri > 30 ? "󰃟" : "󰃞"
-                        font.family: root.font; font.pixelSize: 14
-                        color: root.cPeach
-                    }
-                }
-                Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
-
-                // — Volumen —
-                Item {
-                    width: volContent.implicitWidth + 12; height: 36
-                    Row {
-                        id: volContent; anchors.centerIn: parent; spacing: 4
-                        Text {
-                            text: root.sMute ? "󰝟" : "󰕾"
-                            font.family: root.font; font.pixelSize: 14
-                            color: root.sMute ? root.cSub : root.cYellow
-                        }
-                        Text {
-                            text: root.sVol.toString()
-                            font.family: root.font; font.pixelSize: 11
-                            color: root.sMute ? root.cSub : root.cYellow
-                        }
-                    }
-                    MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: aPavu.running = true
-                        onWheel: function(w) { if (w.angleDelta.y > 0) aVolUp.running = true; else aVolDn.running = true }
                     }
                 }
             }

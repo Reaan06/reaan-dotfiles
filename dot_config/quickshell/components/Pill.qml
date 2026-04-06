@@ -26,7 +26,7 @@ Rectangle {
     radius: pillRadius
     height: 36
     implicitWidth: innerRow.implicitWidth + (hPad * 2)
-    implicitHeight: innerRow.implicitHeight + (vPad * 2)
+    implicitHeight: 36
 
     Behavior on color {
         ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
