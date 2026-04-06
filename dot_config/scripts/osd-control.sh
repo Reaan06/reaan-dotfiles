@@ -3,7 +3,7 @@
 # Usage: osd-control.sh volume up|down|mute
 #        osd-control.sh brightness up|down
 
-OSD_FILE="/tmp/qs-osd"
+OSD_FILE="${XDG_RUNTIME_DIR:-/tmp}/qs-osd"
 TYPE="$1"
 ACTION="$2"
 

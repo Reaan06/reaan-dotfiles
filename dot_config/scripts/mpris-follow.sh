@@ -3,8 +3,9 @@
 # Writes to /tmp/qs-mpris on every track/status change (event-driven).
 # QML handles live position ticking locally — this only provides metadata.
 
-OUT="/tmp/qs-mpris"
-LOCK="/tmp/qs-mpris.lock"
+RTDIR="${XDG_RUNTIME_DIR:-/tmp}"
+LOCK="$RTDIR/qs-mpris.lock"
+OUT="$RTDIR/qs-mpris"
 
 # Single-instance guard: if lock file exists and that process is alive, exit
 if [ -f "$LOCK" ]; then

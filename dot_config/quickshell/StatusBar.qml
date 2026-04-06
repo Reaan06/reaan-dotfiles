@@ -171,7 +171,7 @@ Item {
     // MPRIS — read output from mpris-follow.sh (started globally in shell.qml)
     Process {
         id: mprisProc
-        command: ["cat", "/tmp/qs-mpris"]
+        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-mpris 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var lines = text.trim().split("\n")

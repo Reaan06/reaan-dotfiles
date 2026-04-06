@@ -28,7 +28,7 @@ Item {
     // Poll /tmp/qs-osd for changes
     Process {
         id: osdProc
-        command: ["cat", "/tmp/qs-osd"]
+        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-osd 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var raw = text.trim()
