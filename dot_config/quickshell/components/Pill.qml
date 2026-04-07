@@ -32,12 +32,6 @@ Rectangle {
         ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
     }
 
-    Row {
-        id: innerRow
-        anchors.centerIn: parent
-        spacing: 6
-    }
-
     MouseArea {
         id: mouseArea
         anchors.fill: parent
@@ -54,5 +48,11 @@ Rectangle {
             if (wheel.angleDelta.y > 0) root.scrolledUp()
             else root.scrolledDown()
         }
+    }
+
+    Row {
+        id: innerRow
+        anchors.centerIn: parent
+        spacing: 6
     }
 }

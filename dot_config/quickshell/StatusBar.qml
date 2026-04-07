@@ -220,9 +220,9 @@ Item {
     Process { id: aRofi;   command: ["rofi", "-show", "drun"] }
     Process { id: aPower;  command: ["sh", "-c", "~/.config/scripts/powermenu.sh"] }
     Process { id: aPavu;   command: ["pavucontrol"] }
-    Process { id: aMpNext;  command: ["playerctl", "next"] }
-    Process { id: aMpPrev;  command: ["playerctl", "previous"] }
-    Process { id: aMpToggle; command: ["playerctl", "play-pause"] }
+    Process { id: aMpNext;  command: ["sh", "-c", "~/.config/scripts/mp-next.sh"] }
+    Process { id: aMpPrev;  command: ["sh", "-c", "~/.config/scripts/mp-prev.sh"] }
+    Process { id: aMpToggle; command: ["sh", "-c", "~/.config/scripts/mp-toggle.sh"] }
     Process { id: aBtMan;  command: ["blueman-manager"] }
     Process { id: aNmEdit; command: ["nm-connection-editor"] }
     Process { id: aVolUp;  command: ["pamixer", "-i", "5"] }
@@ -349,76 +349,118 @@ Item {
         // ──────── 3. MPRIS — art | info(2 líneas) | controles ────────
         Pill {
             visible: root.mpActive
-            pillColor: root.cPill; hoverColor: root.cHover; hPad: 8
+            pillColor: root.cPill; hoverColor: root.cHover; hPad: 18
 
-            // Carátula del álbum
-            Rectangle {
-                width: 28; height: 28; radius: 6
-                color: Qt.rgba(1,1,1,0.05)
-                clip: true
-                opacity: root.mpInfoOpacity
-                Image {
-                    anchors.fill: parent
-                    source: root.mpArtUrl
-                    fillMode: Image.PreserveAspectCrop
-                    visible: status === Image.Ready
-                    Behavior on source { PropertyAnimation { duration: 0 } }
-                }
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰎆"
-                    font.family: root.font; font.pixelSize: 14; color: root.cGreen
-                    visible: root.mpArtUrl.length === 0
-                }
-            }
+            onScrolledUp: aMpNext.running = true
+            onScrolledDown: aMpPrev.running = true
+            onClicked: aMpToggle.running = true
 
-            // Info: título arriba, duración abajo
-            Column {
-                spacing: 1
-                opacity: root.mpInfoOpacity
-                Text {
-                    id: mpTitleText
-                    text: {
-                        var a = root.mpArtist
-                        var t = root.mpTitle
-                        var full = a.length > 0 ? a + " - " + t : t
-                        return root.truncate(full, 22)
+            // Grupo Logo + Texto centrado
+            Row {
+                spacing: 8
+                anchors.verticalCenter: parent.verticalCenter
+
+                // Carátula del álbum
+                Rectangle {
+                    width: 26; height: 26; radius: 6
+                    color: Qt.rgba(1,1,1,0.05)
+                    clip: true
+                    opacity: root.mpInfoOpacity
+                    Image {
+                        anchors.fill: parent
+                        source: root.mpArtUrl
+                        fillMode: Image.PreserveAspectCrop
+                        visible: status === Image.Ready
+                        Behavior on source { PropertyAnimation { duration: 0 } }
                     }
-                    font.family: root.font; font.pixelSize: 11; color: root.cText
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰎆"
+                        font.family: root.font; font.pixelSize: 13; color: root.cGreen
+                        visible: root.mpArtUrl.length === 0
+                    }
                 }
-                Text {
-                    visible: root.mpLen > 0
-                    text: root.fmtTime(root.mpPos) + " / " + root.fmtTime(root.mpLen)
-                    font.family: root.font; font.pixelSize: 9; color: root.cSub
+
+                // Info: título arriba, duración abajo
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 1
+                    opacity: root.mpInfoOpacity
+                    Text {
+                        id: mpTitleText
+                        text: {
+                            var a = root.mpArtist
+                            var t = root.mpTitle
+                            var full = a.length > 0 ? a + " - " + t : t
+                            return root.truncate(full, 28)
+                        }
+                        font.family: root.font; font.pixelSize: 10; color: root.cText
+                    }
+                    Text {
+                        visible: root.mpLen > 0
+                        text: root.fmtTime(root.mpPos) + " / " + root.fmtTime(root.mpLen)
+                        font.family: root.font; font.pixelSize: 9; color: root.cSub
+                    }
                 }
             }
 
-            Rectangle { width: 1; height: 20; color: Qt.rgba(1,1,1,0.08) }
+            Item { width: 4 }
+            Rectangle {
+                width: 1; height: 35; color: Qt.rgba(1,1,1,0.08)
+                anchors.bottom: parent.bottom
+            }
 
             // Controles centrados
             Row {
-                spacing: 8
-                Text {
-                    text: "󰒮"
-                    font.family: root.font; font.pixelSize: 14; color: root.cSub
+                spacing: 0
+                Rectangle {
+                    width: 24; height: 36; radius: 9
+                    color: hoverAreaPrev.containsMouse ? Qt.rgba(1,1,1,0.1) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰒮"
+                        font.family: root.font; font.pixelSize: 16; color: root.cSub
+                    }
                     MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        id: hoverAreaPrev
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
                         onClicked: aMpPrev.running = true
                     }
                 }
-                Text {
-                    text: root.mpPlaying ? "󰏦" : "󰐍"
-                    font.family: root.font; font.pixelSize: 18; color: root.cTeal
+                Rectangle {
+                    width: 32; height: 36; radius: 9
+                    color: hoverAreaPlay.containsMouse ? Qt.rgba(0.58, 0.89, 0.84, 0.2) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.mpPlaying ? "󰏦" : "󰐍"
+                        font.family: root.font; font.pixelSize: 21; color: root.cTeal
+                    }
                     MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        id: hoverAreaPlay
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
                         onClicked: aMpToggle.running = true
                     }
                 }
-                Text {
-                    text: "󰒭"
-                    font.family: root.font; font.pixelSize: 14; color: root.cSub
+                Rectangle {
+                    width: 24; height: 36; radius: 9
+                    color: hoverAreaNext.containsMouse ? Qt.rgba(1,1,1,0.1) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰒭"
+                        font.family: root.font; font.pixelSize: 16; color: root.cSub
+                    }
                     MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        id: hoverAreaNext
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
                         onClicked: aMpNext.running = true
                     }
                 }
