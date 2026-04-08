@@ -1,0 +1,7 @@
+error: failed to parse manifest at `/home/reaan/reaan-dotfiles/eq-service/Cargo.toml`
+
+Caused by:
+  failed to parse the version requirement `6.1.` for dependency `rustfft`
+
+Caused by:
+  unexpected end of input while parsing patch version number
