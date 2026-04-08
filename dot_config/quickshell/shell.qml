@@ -9,6 +9,24 @@ import QtQuick
 // de vida automáticamente.
 
 ShellRoot {
+    // ── Global state for AudioManager ──
+    property bool audioManagerVisible: false
+    property string _lastAmState: ""
+
+    Process {
+        id: amStateProc
+        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var raw = text.trim()
+                if (raw === _lastAmState) return
+                _lastAmState = raw
+                audioManagerVisible = (raw === "visible")
+            }
+        }
+    }
+    Timer { interval: 250; running: true; repeat: true; triggeredOnStart: true; onTriggered: amStateProc.running = true }
+
     // ── Global: start MPRIS follow daemon (once, not per-monitor) ──
     Process {
         id: mprisStart
@@ -75,6 +93,40 @@ ShellRoot {
             color: "transparent"
 
             Osd {
+                anchors.fill: parent
+            }
+        }
+    }
+
+    // ── AudioManager popup (top-left, one per monitor, visibility controlled by shell state) ──
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: audioManagerWin
+
+            property var modelData
+            screen: modelData
+
+            visible: audioManagerVisible
+
+            anchors {
+                top: true
+                left: true
+            }
+
+            margins {
+                top: 60
+                left: 16
+            }
+
+            width: 500
+            height: 650
+
+            exclusionMode: ExclusionMode.Ignore
+            color: "transparent"
+
+            AudioManager {
                 anchors.fill: parent
             }
         }

@@ -101,7 +101,7 @@ CORE=(
     swaybg grim slurp swappy
 
     # Audio / Brillo
-    pavucontrol playerctl brightnessctl pamixer light
+    pavucontrol playerctl brightnessctl pamixer light easyeffects
 
     # Gestor de pantallas + Imagemagick (colores dinámicos)
     nwg-displays imagemagick jq
@@ -343,6 +343,7 @@ if [ "$all_ok" = true ]; then
     echo -e "    3. Iniciar sesión\n"
     echo -e "  ${CYAN}Atajos principales:${NC}"
     echo -e "    ${YELLOW}Super + Return${NC}    Terminal"
+    echo -e "    ${YELLOW}Super + F1${NC}        Audio Manager"
     echo -e "    ${YELLOW}Super${NC}             Launcher"
     echo -e "    ${YELLOW}Super + Q${NC}         Cerrar ventana"
     echo -e "    ${YELLOW}Super + W${NC}         Wallpaper picker"
