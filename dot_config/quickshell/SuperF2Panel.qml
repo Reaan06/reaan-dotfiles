@@ -62,8 +62,11 @@ Item {
             Loader {
                 id: mainLoader
                 Layout.fillWidth: true; Layout.fillHeight: true
-                source: Qt.resolvedUrl("SystemMonitor.qml")
-                onStatusChanged: if (status == Loader.Error) console.log("Error loading: " + source)
+                source: "/home/reaan/reaan-dotfiles/dot_config/quickshell/WeatherCalendarView.qml"
+                onStatusChanged: {
+                    if (status == Loader.Error) console.log("CRITICAL: Loader error: " + source + " -> " + sourceError)
+                    else if (status == Loader.Ready) console.log("SUCCESS: Loaded " + source)
+                }
             }
 
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.06) }

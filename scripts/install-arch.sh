@@ -153,10 +153,27 @@ yay -S --needed --noconfirm "${CLI_TOOLS[@]}"
 ok "Todos los paquetes instalados"
 
 # ═══════════════════════════════════════════════════════════════
-#  Despliegue de Dotfiles
+#  Compilación e Instalación de eq-service
 # ═══════════════════════════════════════════════════════════════
 
-header "Desplegando Dotfiles"
+header "Instalando Servicio de Audio (eq-service)"
+
+if [ -d "$DOTFILES_DIR/eq-service" ]; then
+    info "Compilando eq-service..."
+    cd "$DOTFILES_DIR/eq-service"
+    cargo build --release
+    sudo cp target/release/eq-service /usr/local/bin/
+    
+    info "Configurando servicio systemd para eq-service..."
+    mkdir -p "$HOME/.config/systemd/user"
+    cp eq-service.service "$HOME/.config/systemd/user/"
+    systemctl --user daemon-reload
+    systemctl --user enable --now eq-service
+    ok "eq-service instalado y servicio activado"
+else
+    warn "Directorio eq-service no encontrado. Saltando..."
+fi
+
 
 # Directorios destino
 mkdir -p ~/.config/{hypr,quickshell/components,kitty,rofi,swaync,nvim,cava,scripts,qt6ct}
