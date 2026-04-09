@@ -9,19 +9,31 @@ import QtQuick
 // de vida automáticamente.
 
 ShellRoot {
-    // ── Global state for AudioManager ──
+    // ── Global state for AudioManager & Super F2 ──
     property bool audioManagerVisible: false
+    property bool superF2Visible: false
     property string _lastAmState: ""
+    property string _lastF2State: ""
 
     Process {
         id: amStateProc
-        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null"]
+        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var raw = text.trim()
-                if (raw === _lastAmState) return
-                _lastAmState = raw
-                audioManagerVisible = (raw === "visible")
+                var parts = text.trim().split("---")
+                if (parts.length < 2) return
+                
+                var amRaw = parts[0].trim()
+                var f2Raw = parts[1].trim()
+
+                if (amRaw !== _lastAmState) {
+                    _lastAmState = amRaw
+                    audioManagerVisible = (amRaw === "visible")
+                }
+                if (f2Raw !== _lastF2State) {
+                    _lastF2State = f2Raw
+                    superF2Visible = (f2Raw === "visible")
+                }
             }
         }
     }
@@ -120,13 +132,47 @@ ShellRoot {
                 left: 16
             }
 
-            width: 500
-            height: 650
+            implicitWidth: 500
+            implicitHeight: 650
 
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
 
             AudioManager {
+                anchors.fill: parent
+            }
+        }
+    }
+
+    // ── Super F2 Panel popup (center-top, one per monitor, visibility controlled by shell state) ──
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: superF2Win
+
+            property var modelData
+            screen: modelData
+
+            visible: superF2Visible
+
+            anchors {
+                top: true
+                left: true
+            }
+
+            margins {
+                top: 60
+                left: (modelData && modelData.geometry) ? (modelData.geometry.width - 1200) / 2 : 0
+            }
+
+            implicitWidth: 1200
+            implicitHeight: 700
+
+            exclusionMode: ExclusionMode.Ignore
+            color: "transparent"
+
+            SuperF2Panel {
                 anchors.fill: parent
             }
         }

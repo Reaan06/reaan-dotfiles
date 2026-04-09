@@ -112,6 +112,9 @@ CORE=(
     # Bluetooth
     bluez bluez-utils blueman
 
+    # GitHub + Sensors
+    github-cli lm_sensors
+
     # Red
     network-manager-applet
 
