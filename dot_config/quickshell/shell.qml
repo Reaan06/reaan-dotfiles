@@ -159,21 +159,23 @@ ShellRoot {
             anchors {
                 top: true
                 left: true
+                right: true
             }
 
             margins {
                 top: 60
-                left: (modelData && modelData.geometry) ? (modelData.geometry.width - 1200) / 2 : 0
             }
 
-            implicitWidth: 1200
-            implicitHeight: 700
+            // Window itself spans full width (transparent), content is centered inside
+            implicitHeight: 750
 
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
 
             SuperF2Panel {
-                anchors.fill: parent
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 1200
+                height: 700
             }
         }
     }

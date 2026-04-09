@@ -1,92 +1,102 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
-import "components"
 
-// Super F2 Panel — Integrated Stats, Temp & GitHub
+// Super F2 Panel — Reimagined Modern UI (Ultra Stable)
 Item {
     id: root
 
     readonly property string font: "JetBrains Mono Nerd Font"
     
-    // Theme (Matching AudioManager)
-    property color cPill: Qt.rgba(0.08, 0.08, 0.12, 0.99)
+    // Theme - Catppuccin Mocha inspired
+    property color cBg: Qt.rgba(0.07, 0.07, 0.1, 0.98)
     property color cMauve: "#cba6f7"
+    property color cBlue: "#89b4fa"
     property color cText: "#cdd6f4"
     property color cSub: "#6c7086"
+    property color cSurface: Qt.rgba(1, 1, 1, 0.05)
 
     Rectangle {
-        anchors.fill: parent; radius: 36; color: root.cPill
-        border.color: Qt.rgba(1,1,1,0.06); border.width: 1
+        id: container
+        anchors.fill: parent; radius: 40; color: root.cBg
+        border.color: Qt.rgba(1,1,1,0.08); border.width: 1
 
         ColumnLayout {
-            anchors.fill: parent; anchors.margins: 32; spacing: 20
+            anchors.fill: parent; anchors.margins: 40; spacing: 24
 
             // Top Header
             RowLayout {
                 Layout.fillWidth: true; spacing: 20
-                Text {
-                    text: "SUPER F2 PANEL"; font.family: root.font; font.pixelSize: 22; font.bold: true
-                    color: root.cMauve; Layout.alignment: Qt.AlignVCenter
+                Row {
+                    spacing: 12
+                    Rectangle { width: 48; height: 48; radius: 14; color: root.cMauve
+                        Text { anchors.centerIn: parent; text: "󰍛"; font.pixelSize: 24; color: "#11111b" }
+                    }
+                    ColumnLayout {
+                        spacing: 0
+                        Text { text: "DASHBOARD"; font.family: root.font; font.pixelSize: 20; font.bold: true; color: root.cText }
+                        Text { text: "System Overview & Monitoring"; font.family: root.font; font.pixelSize: 12; color: root.cSub }
+                    }
                 }
                 Item { Layout.fillWidth: true }
-                // Close button mimic
+                
+                // Close Button
                 Rectangle {
-                    width: 40; height: 40; radius: 12; color: Qt.rgba(1,1,1,0.06)
+                    width: 44; height: 44; radius: 14; color: root.cSurface
                     Text { anchors.centerIn: parent; text: "󰅖"; font.family: root.font; font.pixelSize: 18; color: root.cText }
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            // Trigger toggle-off via script
-                            mProc.command = ["~/.config/scripts/super-f2-toggle.sh", "hide"]
+                            mProc.command = ["sh", "-c", "echo 'hidden' > ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2"]
                             mProc.running = true
                         }
                     }
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.04) }
+            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.06) }
 
-            // Content Area (StackView replacement with simple toggle for now to avoid StackView overhead if not needed)
-            // But StackView is more flexible for "next/prev" feel.
-            StackView {
-                id: stackView; Layout.fillWidth: true; Layout.fillHeight: true
-                initialItem: "SystemMonitor.qml"
-                clip: true
+            // Main Content Area
+            Loader {
+                id: mainLoader
+                Layout.fillWidth: true; Layout.fillHeight: true
+                source: Qt.resolvedUrl("SystemMonitor.qml")
+                onStatusChanged: if (status == Loader.Error) console.log("Error loading: " + source)
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.04) }
+            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.06) }
 
-            // Bottom Navigation (Mimic presets bar)
+            // Navigation Bar
             RowLayout {
-                Layout.fillWidth: true; spacing: 14; Layout.alignment: Qt.AlignHCenter
+                Layout.fillWidth: true; spacing: 16; Layout.alignment: Qt.AlignHCenter
 
                 Repeater {
                     model: [
-                        { name: "SYSTEM", icon: "󰍛", source: "SystemMonitor.qml" },
-                        { name: "TEMP", icon: "󰔏", source: "TemperatureHistoryView.qml" },
-                        { name: "GITHUB", icon: "󰊤", source: "GitHubLinkingView.qml" }
+                        { name: "SYSTEM", icon: "󰍛", file: "SystemMonitor.qml" },
+                        { name: "CLIMA", icon: "󰖐", file: "WeatherCalendarView.qml" },
+                        { name: "GITHUB", icon: "󰊤", file: "GitHubLinkingView.qml" }
                     ]
                     Rectangle {
-                        Layout.fillWidth: true; Layout.preferredHeight: 44; radius: 14
-                        color: stackView.currentItem && stackView.currentItem.objectName === modelData.source ? root.cMauve : Qt.rgba(1,1,1,0.06)
+                        Layout.preferredWidth: 160; Layout.preferredHeight: 50; radius: 16
+                        color: mainLoader.source.toString().includes(modelData.file) ? root.cMauve : root.cSurface
+                        
                         Row {
-                            anchors.centerIn: parent; spacing: 8
+                            anchors.centerIn: parent; spacing: 10
                             Text { 
-                                text: modelData.icon; font.family: root.font; font.pixelSize: 16
-                                color: stackView.currentItem && stackView.currentItem.objectName === modelData.source ? "#11111b" : root.cMauve
+                                text: modelData.icon; font.family: root.font; font.pixelSize: 18
+                                color: mainLoader.source.toString().includes(modelData.file) ? "#11111b" : root.cMauve
                             }
                             Text {
                                 text: modelData.name; font.family: root.font; font.pixelSize: 13; font.bold: true
-                                color: stackView.currentItem && stackView.currentItem.objectName === modelData.source ? "#11111b" : root.cText
+                                color: mainLoader.source.toString().includes(modelData.file) ? "#11111b" : root.cText
                             }
                         }
+                        
                         MouseArea {
                             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            onClicked: stackView.replace(modelData.source)
+                            onClicked: mainLoader.source = Qt.resolvedUrl(modelData.file)
                         }
                     }
                 }
