@@ -41,7 +41,7 @@ Item {
     property bool   sMute:    false
     property int    sBri:     0
     property string sWeather: ""
-    property string sDistro:  ""
+
     property string sKbLang:  "EN"
 
     // MPRIS state via playerctl
@@ -74,20 +74,13 @@ Item {
         }
     }
 
-    // Distro (una sola vez)
-    Process {
-        id: distroProc
-        command: ["sh", "-c", "grep '^ID=' /etc/os-release | cut -d= -f2"]
-        stdout: StdioCollector { onStreamFinished: { root.sDistro = text.trim() } }
-    }
-    Component.onCompleted: { distroProc.running = true; paletteProc.running = true }
-
-    // Lector de paleta dinámica (generada por wallpaper-picker.sh)
+    // Palette (una sola vez)
     Process {
         id: paletteProc
         command: ["sh", "-c", "cat $HOME/.cache/qs-palette 2>/dev/null"]
         stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
     }
+    Component.onCompleted: { paletteProc.running = true }
     Timer { interval: 3000; running: true; repeat: true; onTriggered: paletteProc.running = true }
 
     // Layout de teclado actual
@@ -248,15 +241,7 @@ Item {
         var r = s % 60
         return (m < 10 ? "0" : "") + m + ":" + (r < 10 ? "0" : "") + r
     }
-    function distroIcon() {
-        if (sDistro === "arch") return "\uf303"
-        if (sDistro === "ubuntu") return "\uf31b"
-        if (sDistro === "fedora") return "\uf30a"
-        if (sDistro === "debian") return "\uf306"
-        if (sDistro === "manjaro") return "\uf312"
-        if (sDistro === "endeavouros") return "\uf322"
-        return "\uf17c"
-    }
+
     function truncate(str, max) {
         return str.length > max ? str.substring(0, max - 1) + "…" : str
     }
@@ -301,12 +286,13 @@ Item {
 
         // ──────── 1. LOGO DISTRO (color fijo) ────────
         Pill {
-            pillColor: root.cPill; hoverColor: root.cHover; hPad: 12
+            pillColor: root.cPill; hoverColor: root.cHover
+            hPad: 18; vPad: 14
             onClicked: aRofi.running = true
             Text {
-                text: root.distroIcon()
-                font.family: root.font; font.pixelSize: 20
-                color: "#89b4fa"
+                text: "\uf17c"
+                font.family: root.font; font.pixelSize: 24
+                color: "#ffffff"
             }
         }
 
