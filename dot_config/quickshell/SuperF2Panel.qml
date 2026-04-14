@@ -4,13 +4,11 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 
-// Super F2 Panel — Reimagined Modern UI (Ultra Stable)
 Item {
     id: root
 
     readonly property string font: "JetBrains Mono Nerd Font"
     
-    // Theme - Catppuccin Mocha inspired
     property color cBg: Qt.rgba(0.07, 0.07, 0.1, 0.98)
     property color cMauve: "#cba6f7"
     property color cBlue: "#89b4fa"
@@ -26,7 +24,6 @@ Item {
         ColumnLayout {
             anchors.fill: parent; anchors.margins: 40; spacing: 24
 
-            // Top Header
             RowLayout {
                 Layout.fillWidth: true; spacing: 20
                 Row {
@@ -42,7 +39,6 @@ Item {
                 }
                 Item { Layout.fillWidth: true }
                 
-                // Close Button
                 Rectangle {
                     width: 44; height: 44; radius: 14; color: root.cSurface
                     Text { anchors.centerIn: parent; text: "󰅖"; font.family: root.font; font.pixelSize: 18; color: root.cText }
@@ -58,20 +54,17 @@ Item {
 
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.06) }
 
-            // Main Content Area
             Loader {
                 id: mainLoader
                 Layout.fillWidth: true; Layout.fillHeight: true
-                source: "/home/reaan/reaan-dotfiles/dot_config/quickshell/WeatherCalendarView.qml"
+                source: "WeatherCalendarView.qml"
                 onStatusChanged: {
-                    if (status == Loader.Error) console.log("CRITICAL: Loader error: " + source + " -> " + sourceError)
-                    else if (status == Loader.Ready) console.log("SUCCESS: Loaded " + source)
+                    if (status == Loader.Error) console.log("ERROR: " + sourceError)
                 }
             }
 
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.06) }
 
-            // Navigation Bar
             RowLayout {
                 Layout.fillWidth: true; spacing: 16; Layout.alignment: Qt.AlignHCenter
 
@@ -99,7 +92,7 @@ Item {
                         
                         MouseArea {
                             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            onClicked: mainLoader.source = Qt.resolvedUrl(modelData.file)
+                            onClicked: mainLoader.source = modelData.file
                         }
                     }
                 }

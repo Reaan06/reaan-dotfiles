@@ -107,7 +107,7 @@ CORE=(
     nwg-displays imagemagick jq
 
     # Wallpaper picker GUI (GTK4 + Libadwaita)
-    python-gobject gtk4 libadwaita
+    python-gobject gtk4 libadwaita python-requests
 
     # Bluetooth
     bluez bluez-utils blueman
