@@ -11,6 +11,10 @@ Rectangle {
     color: "transparent"
 
     readonly property string font: "JetBrains Mono Nerd Font"
+    
+    // ═══════════════════════════════════════════════
+    // THEME — Dinámico (Heredado o parseado)
+    // ═══════════════════════════════════════════════
     property color cMauve: "#cba6f7"
     property color cBlue: "#89b4fa"
     property color cTeal: "#94e2d5"
@@ -18,6 +22,36 @@ Rectangle {
     property color cText: "#cdd6f4"
     property color cSub: "#6c7086"
     property color cBg: Qt.rgba(0.1, 0.1, 0.15, 0.3)
+
+    // Animaciones para que sea real
+    Behavior on cMauve { ColorAnimation { duration: 600 } }
+    Behavior on cBlue { ColorAnimation { duration: 600 } }
+    Behavior on cTeal { ColorAnimation { duration: 600 } }
+    Behavior on cPeach { ColorAnimation { duration: 600 } }
+    Behavior on cText { ColorAnimation { duration: 600 } }
+    Behavior on cSub { ColorAnimation { duration: 600 } }
+    Behavior on cBg { ColorAnimation { duration: 600 } }
+
+    function parsePalette(raw) {
+        if (raw.length === 0) return
+        var parts = raw.split(" ")
+        if (parts.length < 8) return
+        var pc = parts[0]
+        cBg    = Qt.rgba(parseInt(pc.substr(1,2),16)/255, parseInt(pc.substr(3,2),16)/255, parseInt(pc.substr(5,2),16)/255, 0.4)
+        cTeal  = parts[1]
+        cBlue  = parts[1] // Usamos el mismo accent para cohesión
+        cMauve = parts[3]
+        cPeach = parts[4]
+        cText  = parts[6]
+        cSub   = parts[7]
+    }
+
+    Process {
+        id: paletteProc
+        command: ["sh", "-c", "cat $HOME/.cache/qs-palette 2>/dev/null"]
+        stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
+    }
+    Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
 
     property var stats: ({
         cpu: {name: "CPU", usage: 0, temp: 0},
@@ -27,158 +61,63 @@ Rectangle {
         net: {down: 0, up: 0, t_down: 0, t_up: 0, history: [0,0,0,0,0,0,0,0,0,0]}
     })
 
-    // Valores suavizados
     property real sCpu: 0; Behavior on sCpu { NumberAnimation { duration: 1000; easing.type: Easing.OutCubic } }
     property real sGpu: 0; Behavior on sGpu { NumberAnimation { duration: 1000; easing.type: Easing.OutCubic } }
     property real sMem: 0; Behavior on sMem { NumberAnimation { duration: 1000; easing.type: Easing.OutCubic } }
     property real sSt: 0;  Behavior on sSt { NumberAnimation { duration: 1000; easing.type: Easing.OutCubic } }
 
     Process {
-        id: statsProc
-        command: ["sh", "-c", "python3 $HOME/.config/scripts/get_system_stats.py"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    let cleaned = text.trim();
-                    if (cleaned.startsWith("{")) {
-                        let s = JSON.parse(cleaned)
-                        root.stats = s
-                        root.sCpu = s.cpu.usage
-                        root.sGpu = s.gpu.usage
-                        root.sMem = s.mem.perc
-                        root.sSt = s.storage.perc
-                        netCanvas.requestPaint()
-                    }
-                } catch(e) {}
-            }
-        }
+        id: statsProc; command: ["sh", "-c", "python3 $HOME/.config/scripts/get_system_stats.py"]
+        stdout: StdioCollector { onStreamFinished: { try { let s = JSON.parse(text.trim()); root.stats = s; root.sCpu = s.cpu.usage; root.sGpu = s.gpu.usage; root.sMem = s.mem.perc; root.sSt = s.storage.perc; netCanvas.requestPaint() } catch(e) {} } }
     }
     Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: statsProc.running = true }
 
-    // Definicion interna del Circulo para vinculacion directa
     component CircularGauge: Item {
         property real fillVal: 0
         property color fillCol: "white"
         width: 130; height: 130
         Shape {
-            anchors.fill: parent
-            layer.enabled: true; layer.samples: 4
-            ShapePath {
-                strokeColor: Qt.rgba(1,1,1,0.05); strokeWidth: 12; fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                PathAngleArc { centerX: 65; centerY: 65; radiusX: 55; radiusY: 55; startAngle: -90; sweepAngle: 360 }
-            }
-            ShapePath {
-                strokeColor: fillCol; strokeWidth: 12; fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                PathAngleArc { 
-                    centerX: 65; centerY: 65; radiusX: 55; radiusY: 55; startAngle: -90; 
-                    sweepAngle: Math.max(0.1, (fillVal / 100) * 360) 
-                }
-            }
+            anchors.fill: parent; layer.enabled: true; layer.samples: 4
+            ShapePath { strokeColor: Qt.rgba(1,1,1,0.05); strokeWidth: 12; fillColor: "transparent"; capStyle: ShapePath.RoundCap; PathAngleArc { centerX: 65; centerY: 65; radiusX: 55; radiusY: 55; startAngle: -90; sweepAngle: 360 } }
+            ShapePath { strokeColor: fillCol; strokeWidth: 12; fillColor: "transparent"; capStyle: ShapePath.RoundCap; PathAngleArc { centerX: 65; centerY: 65; radiusX: 55; radiusY: 55; startAngle: -90; sweepAngle: Math.max(0.1, (fillVal / 100) * 360) } }
         }
-        Text {
-            anchors.centerIn: parent
-            text: Math.round(fillVal) + "%"
-            color: "#cdd6f4"; font.pixelSize: 20; font.bold: true; font.family: root.font
-        }
+        Text { anchors.centerIn: parent; text: Math.round(fillVal) + "%"; color: root.cText; font.pixelSize: 20; font.bold: true; font.family: root.font }
     }
 
     ColumnLayout {
         anchors.fill: parent; spacing: 25
-
-        // TOP ROW: CPU & GPU
         RowLayout {
             Layout.fillWidth: true; spacing: 25
-            Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 180; radius: 24; color: root.cBg
-                ColumnLayout {
-                    anchors.fill: parent; anchors.margins: 25; spacing: 12
-                    RowLayout {
-                        Text { text: "󰍛"; font.pixelSize: 22; color: root.cBlue }
-                        Text { text: "CPU - " + root.stats.cpu.name; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; elide: Text.ElideRight; Layout.fillWidth: true }
-                        Text { text: Math.round(root.sCpu) + "%"; font.family: root.font; font.pixelSize: 24; font.bold: true; color: root.cBlue }
-                    }
+            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 180; radius: 24; color: root.cBg; border.color: Qt.rgba(1,1,1,0.05); border.width: 1
+                ColumnLayout { anchors.fill: parent; anchors.margins: 25; spacing: 12
+                    RowLayout { Text { text: "󰍛"; font.pixelSize: 22; color: root.cBlue }; Text { text: "CPU - " + root.stats.cpu.name; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; elide: Text.ElideRight; Layout.fillWidth: true }; Text { text: Math.round(root.sCpu) + "%"; font.family: root.font; font.pixelSize: 24; font.bold: true; color: root.cBlue } }
                     Text { text: root.stats.cpu.temp.toFixed(0) + "°C Temp"; font.family: root.font; font.pixelSize: 16; color: root.cSub }
-                    Rectangle {
-                        Layout.fillWidth: true; Layout.preferredHeight: 6; radius: 3; color: Qt.rgba(1, 1, 1, 0.05)
-                        Rectangle { width: Math.max(4, parent.width * (root.sCpu / 100)); height: parent.height; radius: 3; color: root.cBlue }
-                    }
+                    Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 6; radius: 3; color: Qt.rgba(1, 1, 1, 0.05); Rectangle { width: Math.max(4, parent.width * (root.sCpu / 100)); height: parent.height; radius: 3; color: root.cBlue } }
                 }
             }
-            Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 180; radius: 24; color: root.cBg
-                ColumnLayout {
-                    anchors.fill: parent; anchors.margins: 25; spacing: 12
-                    RowLayout {
-                        Text { text: "󰢮"; font.pixelSize: 22; color: root.cTeal }
-                        Text { text: "GPU - " + root.stats.gpu.name; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; elide: Text.ElideRight; Layout.fillWidth: true }
-                        Text { text: Math.round(root.sGpu) + "%"; font.family: root.font; font.pixelSize: 24; font.bold: true; color: root.cTeal }
-                    }
+            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 180; radius: 24; color: root.cBg; border.color: Qt.rgba(1,1,1,0.05); border.width: 1
+                ColumnLayout { anchors.fill: parent; anchors.margins: 25; spacing: 12
+                    RowLayout { Text { text: "󰢮"; font.pixelSize: 22; color: root.cTeal }; Text { text: "GPU - " + root.stats.gpu.name; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; elide: Text.ElideRight; Layout.fillWidth: true }; Text { text: Math.round(root.sGpu) + "%"; font.family: root.font; font.pixelSize: 24; font.bold: true; color: root.cTeal } }
                     Text { text: root.stats.gpu.temp.toFixed(0) + "°C Temp"; font.family: root.font; font.pixelSize: 16; color: root.cSub }
-                    Rectangle {
-                        Layout.fillWidth: true; Layout.preferredHeight: 6; radius: 3; color: Qt.rgba(1, 1, 1, 0.05)
-                        Rectangle { width: Math.max(4, parent.width * (root.sGpu / 100)); height: parent.height; radius: 3; color: root.cTeal }
-                    }
+                    Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 6; radius: 3; color: Qt.rgba(1, 1, 1, 0.05); Rectangle { width: Math.max(4, parent.width * (root.sGpu / 100)); height: parent.height; radius: 3; color: root.cTeal } }
                 }
             }
         }
-
-        // BOTTOM ROW: MEM, STORAGE, NET
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 25
-            Rectangle {
-                Layout.fillWidth: true; Layout.fillHeight: true; radius: 24; color: root.cBg
-                ColumnLayout {
-                    anchors.fill: parent; anchors.margins: 20
-                    Text { text: "Memory"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; Layout.alignment: Qt.AlignHCenter }
-                    CircularGauge { fillVal: root.sMem; fillCol: root.cMauve; Layout.alignment: Qt.AlignHCenter }
-                    Text { text: root.stats.mem.used + " / " + root.stats.mem.total + " GiB"; font.family: root.font; font.pixelSize: 12; color: root.cSub; Layout.alignment: Qt.AlignHCenter }
-                }
+            Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: 24; color: root.cBg; border.color: Qt.rgba(1,1,1,0.05); border.width: 1
+                ColumnLayout { anchors.fill: parent; anchors.margins: 20; Text { text: "Memory"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; Layout.alignment: Qt.AlignHCenter }; CircularGauge { fillVal: root.sMem; fillCol: root.cMauve; Layout.alignment: Qt.AlignHCenter }; Text { text: root.stats.mem.used + " / " + root.stats.mem.total + " GiB"; font.family: root.font; font.pixelSize: 12; color: root.cSub; Layout.alignment: Qt.AlignHCenter } }
             }
-            Rectangle {
-                Layout.fillWidth: true; Layout.fillHeight: true; radius: 24; color: root.cBg
-                ColumnLayout {
-                    anchors.fill: parent; anchors.margins: 20
-                    Text { text: "Storage"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; Layout.alignment: Qt.AlignHCenter }
-                    CircularGauge { fillVal: root.sSt; fillCol: root.cBlue; Layout.alignment: Qt.AlignHCenter }
-                    Text { text: root.stats.storage.used + " / " + root.stats.storage.total + " GiB"; font.family: root.font; font.pixelSize: 12; color: root.cSub; Layout.alignment: Qt.AlignHCenter }
-                }
+            Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: 24; color: root.cBg; border.color: Qt.rgba(1,1,1,0.05); border.width: 1
+                ColumnLayout { anchors.fill: parent; anchors.margins: 20; Text { text: "Storage"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; Layout.alignment: Qt.AlignHCenter }; CircularGauge { fillVal: root.sSt; fillCol: root.cBlue; Layout.alignment: Qt.AlignHCenter }; Text { text: root.stats.storage.used + " / " + root.stats.storage.total + " GiB"; font.family: root.font; font.pixelSize: 12; color: root.cSub; Layout.alignment: Qt.AlignHCenter } }
             }
-            Rectangle {
-                Layout.fillWidth: true; Layout.fillHeight: true; radius: 24; color: root.cBg
-                ColumnLayout {
-                    anchors.fill: parent; anchors.margins: 25; spacing: 10
-                    RowLayout {
-                        Text { text: "󰓅 Network"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText }
-                        Item { Layout.fillWidth: true }
-                        Text { text: "Total: " + (root.stats.net.t_down + root.stats.net.t_up).toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 12; color: root.cPeach; font.bold: true }
+            Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: 24; color: root.cBg; border.color: Qt.rgba(1,1,1,0.05); border.width: 1
+                ColumnLayout { anchors.fill: parent; anchors.margins: 25; spacing: 10
+                    RowLayout { Text { text: "󰓅 Network"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText }; Item { Layout.fillWidth: true }; Text { text: "Total: " + (root.stats.net.t_down + root.stats.net.t_up).toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 12; color: root.cPeach; font.bold: true } }
+                    Canvas { id: netCanvas; Layout.fillWidth: true; Layout.preferredHeight: 80
+                        onPaint: { var ctx = getContext("2d"); ctx.clearRect(0, 0, width, height); let h = root.stats.net.history; if (h.length < 2) return; let maxV = Math.max(...h, 50); let step = width / (h.length - 1); var grad = ctx.createLinearGradient(0, 0, 0, height); grad.addColorStop(0, Qt.rgba(root.cPeach.r, root.cPeach.g, root.cPeach.b, 0.2)); grad.addColorStop(1, "transparent"); ctx.beginPath(); ctx.moveTo(0, height); for (let i = 0; i < h.length; i++) ctx.lineTo(i * step, height - (h[i] / maxV) * height); ctx.lineTo(width, height); ctx.fillStyle = grad; ctx.fill(); ctx.beginPath(); ctx.moveTo(0, height - (h[0] / maxV) * height); for (let i = 1; i < h.length; i++) ctx.lineTo(i * step, height - (h[i] / maxV) * height); ctx.strokeStyle = root.cPeach; ctx.lineWidth = 2; ctx.stroke(); }
                     }
-                    Canvas {
-                        id: netCanvas; Layout.fillWidth: true; Layout.preferredHeight: 80
-                        onPaint: {
-                            var ctx = getContext("2d"); ctx.clearRect(0, 0, width, height);
-                            let h = root.stats.net.history; if (h.length < 2) return;
-                            let maxV = Math.max(...h, 50); let step = width / (h.length - 1);
-                            var grad = ctx.createLinearGradient(0, 0, 0, height);
-                            grad.addColorStop(0, Qt.rgba(1, 0.7, 0.5, 0.2)); grad.addColorStop(1, "transparent");
-                            ctx.beginPath(); ctx.moveTo(0, height);
-                            for (let i = 0; i < h.length; i++) ctx.lineTo(i * step, height - (h[i] / maxV) * height);
-                            ctx.lineTo(width, height); ctx.fillStyle = grad; ctx.fill();
-                            ctx.beginPath(); ctx.moveTo(0, height - (h[0] / maxV) * height);
-                            for (let i = 1; i < h.length; i++) ctx.lineTo(i * step, height - (h[i] / maxV) * height);
-                            ctx.strokeStyle = root.cPeach; ctx.lineWidth = 2; ctx.stroke();
-                        }
-                    }
-                    RowLayout {
-                        spacing: 20
-                        ColumnLayout {
-                            Text { text: "DOWN"; font.family: root.font; font.pixelSize: 10; color: root.cSub }
-                            Text { text: root.stats.net.t_down.toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText }
-                        }
-                        ColumnLayout {
-                            Text { text: "UP"; font.family: root.font; font.pixelSize: 10; color: root.cSub }
-                            Text { text: root.stats.net.t_up.toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText }
-                        }
-                    }
+                    RowLayout { spacing: 20; ColumnLayout { Text { text: "DOWN"; font.family: root.font; font.pixelSize: 10; color: root.cSub }; Text { text: root.stats.net.t_down.toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText } }; ColumnLayout { Text { text: "UP"; font.family: root.font; font.pixelSize: 10; color: root.cSub }; Text { text: root.stats.net.t_up.toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText } } }
                 }
             }
         }
