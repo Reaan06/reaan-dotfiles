@@ -114,9 +114,10 @@ Item {
             // ── Content Area ──
             Item {
                 id: contentArea; Layout.fillWidth: true; Layout.fillHeight: true
-                Loader { id: mainLoader; anchors.fill: parent; active: !root.isGithubTab; visible: active; source: root.isGithubTab ? "" : root.currentTab }
+                Loader { id: mainLoader; anchors.fill: parent; active: !root.isGithubTab && root.currentTab !== "AppUsageView.qml"; visible: active; source: (root.isGithubTab || root.currentTab === "AppUsageView.qml") ? "" : root.currentTab }
                 GitHubLinkingView { anchors.fill: parent; ghManager: ghManager; visible: root.isGithubTab && !ghManager.connected }
                 GitHubDashboardView { anchors.fill: parent; ghManager: ghManager; visible: root.isGithubTab && ghManager.connected }
+                AppUsageView { anchors.fill: parent; visible: root.currentTab === "AppUsageView.qml" }
             }
 
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.08) }
@@ -127,9 +128,10 @@ Item {
 
                 Repeater {
                     model: [
-                        { name: "SYSTEM",  icon: "󰍛", tab: "SystemMonitor.qml", accent: root.cBlue },
+                        { name: "SYSTEM",  icon: "󰍛", tab: "SystemMonitor.qml",      accent: root.cBlue },
                         { name: "CLIMA",   icon: "󰖐", tab: "WeatherCalendarView.qml", accent: root.cMauve },
-                        { name: "GITHUB",  icon: "󰊤", tab: "github", accent: root.cGreen }
+                        { name: "GITHUB",  icon: "󰊤", tab: "github",                 accent: root.cGreen },
+                        { name: "Uso de Apps", icon: "󰣆", tab: "AppUsageView.qml", accent: "#f38ba8" }
                     ]
 
                     Rectangle {

@@ -158,6 +158,7 @@ deploy() {
         mkdir -p "$dst" || true
         cp -rf "$src"/. "$dst"/ 2>/dev/null || true
     else
+        mkdir -p "$(dirname "$dst")"
         cp -f "$src" "$dst" 2>/dev/null || true
     fi
 }
@@ -298,6 +299,25 @@ fi
 # Monitor config por defecto
 [ -f ~/.config/hypr/monitors.conf ] || echo "monitor=,preferred,auto,1" > ~/.config/hypr/monitors.conf
 
+# Inicializar cache del tracker de apps si no existe o si el mes cambió
+info "Inicializando tracker de uso de aplicaciones..."
+python3 - << 'PYEOF'
+import json, os, datetime
+cache = os.path.expanduser('~/.cache/app_usage.json')
+month = datetime.datetime.now().strftime('%Y-%m')
+data = {}
+try:
+    data = json.load(open(cache))
+except:
+    pass
+if data.get('_month') != month:
+    data = {'_month': month}
+    json.dump(data, open(cache, 'w'))
+    print(f'  Cache inicializado para {month}')
+else:
+    print(f'  Cache existente ({month}): {len([k for k in data if k != "_month"])} apps registradas')
+PYEOF
+
 # Generar paleta inicial desde wallpaper por defecto
 if [ -f "$HOME/.config/scripts/extract-colors.py" ] && command -v magick &>/dev/null && command -v python3 &>/dev/null; then
     info "Generando paleta de colores inicial..."
@@ -418,7 +438,11 @@ if [ "$all_ok" = true ]; then
         nohup hyprpaper >/dev/null 2>&1 &
         nohup swaync >/dev/null 2>&1 &
         nohup hypridle >/dev/null 2>&1 &
-        nohup quickshell -d >/dev/null 2>&1 &
+        nohup quickshell -d > /dev/null 2>&1 &
+        # Iniciar el tracker de uso de aplicaciones
+        pkill -f app_tracker.py 2>/dev/null || true
+        sleep 0.5
+        nohup python3 "$HOME/.config/scripts/app_tracker.py" >> /tmp/app_tracker.log 2>&1 &
         ok "Servicios y barra recargados con éxito\n"
     else
         echo -e "  ${CYAN}Próximos pasos:${NC}"
