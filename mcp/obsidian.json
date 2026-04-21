@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "obsidian-vault": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home/reaan/Brain/Brain/"
+      ]
+    }
+  }
+}
