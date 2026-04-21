@@ -58,6 +58,7 @@ Rectangle {
 
     // Scroll state tracking
     property bool isHoveringList: false
+    property bool showNotifications: false
 
     // ── Helpers ──
     function eventIcon(type) {
@@ -386,10 +387,25 @@ Rectangle {
                         anchors.fill: parent; anchors.margins: 14; spacing: 6
 
                         RowLayout {
-                            Text { text: "󱅫"; font.pixelSize: 16; color: root.cMauve }
-                            Text { text: "RECENT ACTIVITY"; font.family: root.textFont; font.pixelSize: 12; font.bold: true; color: root.cText; font.letterSpacing: 1 }
+                            Text { text: root.showNotifications ? "󰂚" : "󱅫"; font.pixelSize: 16; color: root.showNotifications ? root.cYellow : root.cMauve }
+                            
+                            Row {
+                                spacing: 10
+                                Text { 
+                                    text: "ACTIVITY"; font.family: root.textFont; font.pixelSize: 12
+                                    font.bold: !root.showNotifications; color: !root.showNotifications ? root.cText : root.cSub; font.letterSpacing: 1 
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; anchors.margins: -5; onClicked: root.showNotifications = false }
+                                }
+                                Text { text: "/"; font.family: root.textFont; font.pixelSize: 12; color: root.cSub }
+                                Text { 
+                                    text: "NOTIFICATIONS"; font.family: root.textFont; font.pixelSize: 12
+                                    font.bold: root.showNotifications; color: root.showNotifications ? root.cText : root.cSub; font.letterSpacing: 1 
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; anchors.margins: -5; onClicked: root.showNotifications = true }
+                                }
+                            }
+                            
                             Item { Layout.fillWidth: true }
-                            Text { text: root.ghManager.events.length + " events"; font.family: root.textFont; font.pixelSize: 10; color: root.cSub }
+                            Text { text: (root.showNotifications ? root.ghManager.notifications.length : root.ghManager.events.length) + (root.showNotifications ? " unread" : " events"); font.family: root.textFont; font.pixelSize: 10; color: root.cSub }
                         }
 
                         ListView {
@@ -399,7 +415,7 @@ Rectangle {
                             Layout.fillWidth: true; Layout.fillHeight: true
                             clip: true; spacing: 3; boundsBehavior: Flickable.StopAtBounds
 
-                            model: root.ghManager.events
+                            model: root.showNotifications ? root.ghManager.notifications : root.ghManager.events
 
                             delegate: Rectangle {
                                 required property var modelData
@@ -409,32 +425,30 @@ Rectangle {
                                 color: evMA.containsMouse ? Qt.rgba(1,1,1,0.04) : (index % 2 === 0 ? Qt.rgba(1,1,1,0.015) : "transparent")
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
-                                MouseArea { id: evMA; anchors.fill: parent; hoverEnabled: true }
+                                MouseArea { id: evMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { if (modelData.url) Qt.openUrlExternally(modelData.url) } }
 
                                 RowLayout {
                                     anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
 
                                     Rectangle {
                                         width: 26; height: 26; radius: 7
-                                        color: Qt.rgba(root.eventIcon(modelData.type).color.r,
-                                                       root.eventIcon(modelData.type).color.g,
-                                                       root.eventIcon(modelData.type).color.b, 0.12)
+                                        color: root.showNotifications ? Qt.rgba(root.cYellow.r, root.cYellow.g, root.cYellow.b, 0.12) : Qt.rgba(root.eventIcon(modelData.type).color.r, root.eventIcon(modelData.type).color.g, root.eventIcon(modelData.type).color.b, 0.12)
                                         Text {
                                             anchors.centerIn: parent
-                                            text: root.eventIcon(modelData.type).icon
-                                            font.pixelSize: 12; color: root.eventIcon(modelData.type).color
+                                            text: root.showNotifications ? "󰂚" : root.eventIcon(modelData.type).icon
+                                            font.pixelSize: 12; color: root.showNotifications ? root.cYellow : root.eventIcon(modelData.type).color
                                         }
                                     }
 
                                     ColumnLayout {
                                         spacing: 0; Layout.fillWidth: true
                                         Text {
-                                            text: modelData.repo ? modelData.repo.split("/").pop() : ""
+                                            text: root.showNotifications ? (modelData.repo ? modelData.repo.split("/").pop() : "") : (modelData.repo ? modelData.repo.split("/").pop() : "")
                                             font.family: root.textFont; font.pixelSize: 11; font.bold: true
                                             color: root.cText; elide: Text.ElideRight; Layout.fillWidth: true
                                         }
                                         Text {
-                                            text: modelData.detail || ""
+                                            text: root.showNotifications ? (modelData.title || "") : (modelData.detail || "")
                                             font.family: root.textFont; font.pixelSize: 9
                                             color: root.cSub; elide: Text.ElideRight; Layout.fillWidth: true
                                         }
@@ -445,7 +459,7 @@ Rectangle {
                                         color: Qt.rgba(1,1,1,0.04)
                                         Text {
                                             id: timeLbl; anchors.centerIn: parent
-                                            text: root.timeAgo(modelData.created_at)
+                                            text: root.showNotifications ? root.timeAgo(modelData.updated_at) : root.timeAgo(modelData.created_at)
                                             font.family: root.textFont; font.pixelSize: 9; color: root.cSub
                                         }
                                     }
@@ -485,7 +499,7 @@ Rectangle {
                                 color: rpMA.containsMouse ? Qt.rgba(1,1,1,0.04) : (index % 2 === 0 ? Qt.rgba(1,1,1,0.015) : "transparent")
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
-                                MouseArea { id: rpMA; anchors.fill: parent; hoverEnabled: true }
+                                MouseArea { id: rpMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { if (modelData.url) Qt.openUrlExternally(modelData.url) } }
 
                                 RowLayout {
                                     anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8

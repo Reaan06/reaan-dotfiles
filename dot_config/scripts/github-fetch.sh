@@ -29,7 +29,7 @@ if [ -n "$TOKEN" ]; then
     # GraphQL query — all data in a single request
     cat > "$TMPDIR/query.json" << ENDJSON
 {
-  "query": "query(\$u:String!){user(login:\$u){login name avatarUrl bio publicRepos:repositories(privacy:PUBLIC){totalCount}privateRepos:repositories(privacy:PRIVATE){totalCount}followers{totalCount}following{totalCount}repositories(first:6,orderBy:{field:PUSHED_AT,direction:DESC},ownerAffiliations:OWNER){nodes{name nameWithOwner isPrivate stargazerCount forkCount description pushedAt primaryLanguage{name color}defaultBranchRef{target{...on Commit{history(first:1){nodes{message committedDate oid}}}}}}}contributionsCollection{contributionCalendar{totalContributions colors weeks{contributionDays{contributionCount date color weekday}}}totalCommitContributions totalPullRequestContributions totalIssueContributions totalPullRequestReviewContributions totalRepositoriesWithContributedCommits commitContributionsByRepository(maxRepositories:8){repository{nameWithOwner primaryLanguage{name color}stargazerCount}contributions{totalCount}}}}}",
+  "query": "query(\$u:String!){user(login:\$u){login name avatarUrl bio publicRepos:repositories(privacy:PUBLIC){totalCount}privateRepos:repositories(privacy:PRIVATE){totalCount}followers{totalCount}following{totalCount}repositories(first:6,orderBy:{field:PUSHED_AT,direction:DESC},ownerAffiliations:OWNER){nodes{name nameWithOwner isPrivate stargazerCount forkCount description pushedAt url primaryLanguage{name color}defaultBranchRef{target{...on Commit{history(first:1){nodes{message committedDate oid}}}}}}}contributionsCollection{contributionCalendar{totalContributions colors weeks{contributionDays{contributionCount date color weekday}}}totalCommitContributions totalPullRequestContributions totalIssueContributions totalPullRequestReviewContributions totalRepositoriesWithContributedCommits commitContributionsByRepository(maxRepositories:8){repository{nameWithOwner url primaryLanguage{name color}stargazerCount}contributions{totalCount}}}}}",
   "variables": {"u": "$USERNAME"}
 }
 ENDJSON
@@ -47,6 +47,12 @@ ENDJSON
         -H "Accept: application/vnd.github.v3+json" \
         "https://api.github.com/users/$USERNAME/events?per_page=15" > "$TMPDIR/events.json" 2>/dev/null
 
+    # Notifications via REST
+    curl -s -m 10 \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/notifications?per_page=15" > "$TMPDIR/notifications.json" 2>/dev/null
+
     # Parse and unify via Python
     TMPDIR_PATH="$TMPDIR" python3 << 'PYEOF'
 import json, sys, os
@@ -62,6 +68,7 @@ def load(path, fallback):
 
 gql = load(os.path.join(tmpdir, "graphql.json"), {})
 events_data = load(os.path.join(tmpdir, "events.json"), [])
+notifications_data = load(os.path.join(tmpdir, "notifications.json"), [])
 
 # Check for errors
 if "errors" in gql:
@@ -114,6 +121,7 @@ for r in (user.get("repositories", {}).get("nodes") or []):
         "lang_color": lang.get("color", "#6c7086"),
         "last_commit": last_commit,
         "last_commit_msg": last_commit_msg,
+        "url": r.get("url", f"https://github.com/{r.get('nameWithOwner', '')}"),
     })
 
 # ── Contributions (from GraphQL — heatmap + stats) ──
@@ -148,6 +156,7 @@ for e in (events_data if isinstance(events_data, list) else [])[:15]:
         "type": e.get("type", ""),
         "repo": e.get("repo", {}).get("name", ""),
         "created_at": e.get("created_at", ""),
+        "url": f"https://github.com/{e.get('repo', {}).get('name', '')}",
     }
     p = e.get("payload", {})
     t = e.get("type", "")
@@ -172,6 +181,30 @@ for e in (events_data if isinstance(events_data, list) else [])[:15]:
     else:
         item["detail"] = ""
     events.append(item)
+
+# ── Notifications (from REST) ──
+notifications = []
+for n in (notifications_data if isinstance(notifications_data, list) else [])[:15]:
+    # Parse notification reason and title
+    subject = n.get("subject", {})
+    item = {
+        "id": n.get("id", ""),
+        "reason": n.get("reason", ""),
+        "title": subject.get("title", ""),
+        "type": subject.get("type", ""),
+        "repo": n.get("repository", {}).get("full_name", ""),
+        "updated_at": n.get("updated_at", ""),
+    }
+    
+    # Construct a clickable URL since GitHub's raw subject URL is an API endpoint
+    api_url = subject.get("url", "")
+    html_url = ""
+    repo_url = f"https://github.com/{item['repo']}"
+    if api_url:
+        # Simplistic conversion from api to html url (e.g. issues, pull requests)
+        html_url = api_url.replace("api.github.com/repos/", "github.com/").replace("/pulls/", "/pull/")
+    item["url"] = html_url if html_url else repo_url
+    notifications.append(item)
 
 # ── Streak calculation ──
 all_days = []
@@ -201,6 +234,7 @@ print(json.dumps({
     "profile": profile,
     "events": events,
     "repos": repos,
+    "notifications": notifications,
     "contributions": contributions,
     "has_token": True,
     "api": "graphql_v4",
@@ -269,6 +303,7 @@ for r in (rp_data if isinstance(rp_data, list) else [])[:6]:
             "lang_color": "#6c7086",
             "last_commit": "",
             "last_commit_msg": "",
+            "url": r.get("html_url", f"https://github.com/{r.get('full_name', '')}"),
         })
 
 events = []
@@ -277,6 +312,7 @@ for e in (ev_data if isinstance(ev_data, list) else [])[:15]:
         "type": e.get("type", ""),
         "repo": e.get("repo", {}).get("name", ""),
         "created_at": e.get("created_at", ""),
+        "url": f"https://github.com/{e.get('repo', {}).get('name', '')}",
     }
     p = e.get("payload", {})
     t = e.get("type", "")
@@ -302,6 +338,7 @@ print(json.dumps({
     "profile": profile,
     "events": events,
     "repos": repos,
+    "notifications": [],
     "contributions": None,
     "has_token": False,
     "api": "rest_v3",

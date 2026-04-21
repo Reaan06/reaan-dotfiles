@@ -25,6 +25,7 @@ QtObject {
     })
     property var events: []
     property var repos: []
+    property var notifications: []
     property var contributions: null
     property bool hasToken: false
 
@@ -49,6 +50,7 @@ QtObject {
                     ghManager.profile = data.profile || ghManager.profile
                     ghManager.events = data.events || []
                     ghManager.repos = data.repos || []
+                    ghManager.notifications = data.notifications || []
                     ghManager.contributions = data.contributions || null
                     ghManager.hasToken = data.has_token || false
                     ghManager.connected = true
@@ -139,6 +141,7 @@ QtObject {
     }
 
     function loadSavedConfig() {
+        _loadProc.running = false
         _loadProc.running = true
     }
 

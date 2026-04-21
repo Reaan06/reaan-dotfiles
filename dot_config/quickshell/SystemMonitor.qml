@@ -78,12 +78,58 @@ Rectangle {
                         root.sMem = s.mem.perc || 0; 
                         root.sSt = s.storage.perc || 0; 
                         netCanvas.requestPaint();
+                        root.checkTemps(s.cpu.temp || 0, s.gpu.temp || 0);
                     }
                 } catch(e) { console.log("Error parsing system stats: " + e); } 
             } 
         }
     }
-    Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: statsProc.running = true }
+    Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: { statsProc.running = false; statsProc.running = true } }
+
+    property bool tempWarningSent: false
+    property bool tempCriticalSent: false
+
+    Process {
+        id: notifyProc
+        property string msg: ""
+        property string icon: ""
+        property string urgency: "normal"
+        command: ["sh", "-c", "notify-send -u " + urgency + " -i " + icon + " 'Alerta de Temperatura' '" + msg + "'"]
+    }
+
+    function checkTemps(cpuTemp, gpuTemp) {
+        var maxTemp = Math.max(cpuTemp, gpuTemp);
+        if (maxTemp >= 90) {
+            if (!tempCriticalSent) {
+                notifyProc.msg = "Temperatura CRÍTICA (" + maxTemp + "°C). El sistema se está sobrecalentando severamente.";
+                notifyProc.icon = "dialog-error";
+                notifyProc.urgency = "critical";
+                notifyProc.running = false;
+                notifyProc.running = true;
+                tempCriticalSent = true;
+                tempWarningSent = true;
+            }
+        } else if (maxTemp >= 80) {
+            if (!tempWarningSent) {
+                notifyProc.msg = "Temperatura alta (" + maxTemp + "°C). El sistema se está calentando.";
+                notifyProc.icon = "dialog-warning";
+                notifyProc.urgency = "normal";
+                notifyProc.running = false;
+                notifyProc.running = true;
+                tempWarningSent = true;
+            }
+            tempCriticalSent = false;
+        } else {
+            tempWarningSent = false;
+            tempCriticalSent = false;
+        }
+    }
+
+    function getTempColor(temp, defaultColor) {
+        if (temp >= 90) return "#f38ba8"; // Rojo crítico
+        if (temp >= 80) return "#fab387"; // Naranja advertencia
+        return defaultColor;
+    }
 
     component CircularGauge: Item {
         property real fillVal: 0
@@ -108,9 +154,9 @@ Rectangle {
                         Text { text: "CPU - " + root.stats.cpu.name; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; elide: Text.ElideRight; Layout.fillWidth: true }
                         Text { text: Math.round(root.sCpu) + "%"; font.family: root.font; font.pixelSize: 24; font.bold: true; color: root.cBlue } 
                     }
-                    Text { text: (root.stats.cpu.temp || 0).toFixed(0) + "°C Temp"; font.family: root.font; font.pixelSize: 16; color: root.cSub }
+                    Text { text: (root.stats.cpu.temp || 0).toFixed(0) + "°C Temp"; font.family: root.font; font.pixelSize: 16; font.bold: (root.stats.cpu.temp >= 80); color: root.getTempColor(root.stats.cpu.temp || 0, root.cSub) }
                     Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 6; radius: 3; color: Qt.rgba(1, 1, 1, 0.05)
-                        Rectangle { width: Math.max(4, parent.width * (root.sCpu / 100)); height: parent.height; radius: 3; color: root.cBlue } 
+                        Rectangle { width: Math.max(4, parent.width * (root.sCpu / 100)); height: parent.height; radius: 3; color: root.getTempColor(root.stats.cpu.temp || 0, root.cBlue) } 
                     }
                 }
             }
@@ -121,9 +167,9 @@ Rectangle {
                         Text { text: "GPU - " + root.stats.gpu.name; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; elide: Text.ElideRight; Layout.fillWidth: true }
                         Text { text: Math.round(root.sGpu) + "%"; font.family: root.font; font.pixelSize: 24; font.bold: true; color: root.cTeal } 
                     }
-                    Text { text: (root.stats.gpu.temp || 0).toFixed(0) + "°C Temp"; font.family: root.font; font.pixelSize: 16; color: root.cSub }
+                    Text { text: (root.stats.gpu.temp || 0).toFixed(0) + "°C Temp"; font.family: root.font; font.pixelSize: 16; font.bold: (root.stats.gpu.temp >= 80); color: root.getTempColor(root.stats.gpu.temp || 0, root.cSub) }
                     Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 6; radius: 3; color: Qt.rgba(1, 1, 1, 0.05)
-                        Rectangle { width: Math.max(4, parent.width * (root.sGpu / 100)); height: parent.height; radius: 3; color: root.cTeal } 
+                        Rectangle { width: Math.max(4, parent.width * (root.sGpu / 100)); height: parent.height; radius: 3; color: root.getTempColor(root.stats.gpu.temp || 0, root.cTeal) } 
                     }
                 }
             }
