@@ -31,25 +31,30 @@ Item {
     Behavior on cSub   { ColorAnimation { duration: 600 } }
 
     function parsePalette(raw) {
-        if (raw.length === 0) return
+        if (!raw || raw.length === 0) return
         var parts = raw.split(" ")
         if (parts.length < 8) return
-        
-        var pc = parts[0]
-        cPill  = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
-                         parseInt(pc.substr(3,2),16)/255,
-                         parseInt(pc.substr(5,2),16)/255, 0.92)
-        cBlue  = parts[1]
-        cGreen = parts[2]
-        cMauve = parts[3]
-        cRed   = parts[5]
-        cText  = parts[6]
-        cSub   = parts[7]
+        try {
+            var pc = parts[0]
+            if (pc && pc.startsWith("#") && pc.length >= 7) {
+                cPill  = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
+                                 parseInt(pc.substr(3,2),16)/255,
+                                 parseInt(pc.substr(5,2),16)/255, 0.92)
+            }
+            cBlue  = parts[1] || cBlue
+            cGreen = parts[2] || cGreen
+            cMauve = parts[3] || cMauve
+            cRed   = parts[5] || cRed
+            cText  = parts[6] || cText
+            cSub   = parts[7] || cSub
+        } catch (e) {
+            console.log("Error parsing palette in AudioManager: " + e)
+        }
     }
 
     Process {
         id: paletteProc
-        command: ["sh", "-c", "cat $HOME/.cache/qs-palette 2>/dev/null"]
+        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
         stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
     }
     Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
@@ -155,14 +160,27 @@ Item {
             RowLayout {
                 Layout.fillWidth: true; Layout.alignment: Qt.AlignHCenter; spacing: 48
                 Text { text: "󰒮"; font.family: root.font; font.pixelSize: 32; color: root.cText; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.prevTrack() } }
-                Rectangle { width: 60; height: 60; radius: 20; color: Qt.rgba(1,1,1,0.08); Text { anchors.centerIn: parent; text: root.mpPlaying ? "󰏦" : "󰐍"; font.family: root.font; font.pixelSize: 34; color: root.cMauve }; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.togglePlay() } }
+                Rectangle {
+                    width: 60; height: 60; radius: 20
+                    color: Qt.rgba(1,1,1,0.08)
+                    Text { anchors.centerIn: parent; text: root.mpPlaying ? "󰏦" : "󰐍"; font.family: root.font; font.pixelSize: 34; color: root.cMauve }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.togglePlay() }
+                }
                 Text { text: "󰒭"; font.family: root.font; font.pixelSize: 32; color: root.cText; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.nextTrack() } }
             }
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.08) }
-            RowLayout { Layout.fillWidth: true; Text { text: "Equalizer"; font.family: root.font; font.pixelSize: 18; font.bold: true; color: root.cMauve }; Item { Layout.fillWidth: true }; Text { text: root.activePreset; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText } }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "Equalizer"; font.family: root.font; font.pixelSize: 18; font.bold: true; color: root.cMauve }
+                Item { Layout.fillWidth: true }
+                Text { text: root.activePreset; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText }
+            }
             RowLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 14; Layout.alignment: Qt.AlignHCenter
-                Repeater { model: 10; ColumnLayout { Layout.fillHeight: true; spacing: 8; Layout.alignment: Qt.AlignHCenter
+                Repeater {
+                    model: 10
+                    ColumnLayout {
+                        Layout.fillHeight: true; spacing: 8; Layout.alignment: Qt.AlignHCenter
                         Item { id: barBox; Layout.fillHeight: true; Layout.preferredWidth: 24; Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 8; height: parent.height; radius: 4; color: Qt.rgba(0,0,0,0.3) }
                             Rectangle { width: 8; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; radius: 4; color: root.cMauve; height: parent.height - dot.y - (dot.height / 2) }
                             Rectangle { id: dot; width: 22; height: 22; radius: 11; color: "white"; border.color: root.cMauve; border.width: 1.5; anchors.horizontalCenter: parent.horizontalCenter; y: da.drag.active ? y : (parent.height - 22) * (1.0 - (root.eqBands[index] + 12) / 24); Behavior on y { enabled: !da.drag.active; NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
@@ -175,7 +193,14 @@ Item {
             }
             GridLayout {
                 Layout.fillWidth: true; Layout.alignment: Qt.AlignHCenter; columns: 4; rowSpacing: 10; columnSpacing: 10
-                Repeater { model: ["Flat", "Bass", "Treble", "Rock", "Pop", "Jazz", "Vocal", "Classic"]; Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 12; color: root.activePreset === modelData ? root.cMauve : Qt.rgba(1,1,1,0.06); Text { anchors.centerIn: parent; text: modelData; font.family: root.font; font.pixelSize: 12; font.bold: root.activePreset === modelData; color: root.activePreset === modelData ? "#11111b" : root.cText }; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setPreset(modelData) } } }
+                Repeater {
+                    model: ["Flat", "Bass", "Treble", "Rock", "Pop", "Jazz", "Vocal", "Classic"]
+                    Rectangle {
+                        Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 12; color: root.activePreset === modelData ? root.cMauve : Qt.rgba(1,1,1,0.06)
+                        Text { anchors.centerIn: parent; text: modelData; font.family: root.font; font.pixelSize: 12; font.bold: root.activePreset === modelData; color: root.activePreset === modelData ? "#11111b" : root.cText }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setPreset(modelData) }
+                    }
+                }
             }
         }
     }

@@ -12,7 +12,7 @@ Item {
 
     // ═══════════════════════════════════════════════
     // PALETA — Dinámica (se actualiza con el wallpaper)
-    // Formato de ~/.cache/qs-palette:
+    // Formato de ~/.config/quickshell/.palette:
     //   pill accent1 accent2 accent3 accent4 accent5 text sub
     // ═══════════════════════════════════════════════
     property color cPill:    Qt.rgba(0.16, 0.16, 0.18, 0.92)
@@ -77,7 +77,7 @@ Item {
     // Palette (una sola vez)
     Process {
         id: paletteProc
-        command: ["sh", "-c", "cat $HOME/.cache/qs-palette 2>/dev/null"]
+        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
         stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
     }
     Component.onCompleted: { paletteProc.running = true }
@@ -251,28 +251,32 @@ Item {
     //           pill  acc1   acc2   acc3   acc4   acc5   text   sub
     property string _lastPalette: ""
     function parsePalette(raw) {
-        if (raw.length === 0 || raw === _lastPalette) return
+        if (!raw || raw.length === 0 || raw === _lastPalette) return
         var parts = raw.split(" ")
         if (parts.length < 8) return
         _lastPalette = raw
-        // pill bg con alpha para transparencia
-        var pc = parts[0]
-        cPill  = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
-                         parseInt(pc.substr(3,2),16)/255,
-                         parseInt(pc.substr(5,2),16)/255, 0.92)
-        cHover = Qt.rgba(parseInt(pc.substr(1,2),16)/255 + 0.06,
-                         parseInt(pc.substr(3,2),16)/255 + 0.06,
-                         parseInt(pc.substr(5,2),16)/255 + 0.06, 0.95)
-        cTeal   = parts[1]
-        cGreen  = parts[2]
-        cMauve  = parts[3]
-        cYellow = parts[4]
-        cRed    = parts[5]
-        cText   = parts[6]
-        cSub    = parts[7]
-        // Derivar azul y peach del accent más saturado
-        cBlue   = parts[1]
-        cPeach  = parts[4]
+        try {
+            var pc = parts[0]
+            if (pc && pc.startsWith("#") && pc.length >= 7) {
+                cPill  = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
+                                 parseInt(pc.substr(3,2),16)/255,
+                                 parseInt(pc.substr(5,2),16)/255, 0.92)
+                cHover = Qt.rgba(parseInt(pc.substr(1,2),16)/255 + 0.06,
+                                 parseInt(pc.substr(3,2),16)/255 + 0.06,
+                                 parseInt(pc.substr(5,2),16)/255 + 0.06, 0.95)
+            }
+            cTeal   = parts[1] || cTeal
+            cGreen  = parts[2] || cGreen
+            cMauve  = parts[3] || cMauve
+            cYellow = parts[4] || cYellow
+            cRed    = parts[5] || cRed
+            cText   = parts[6] || cText
+            cSub    = parts[7] || cSub
+            cBlue   = parts[1] || cBlue
+            cPeach  = parts[4] || cPeach
+        } catch (e) {
+            console.log("Error parsing palette: " + e)
+        }
     }
 
     // ═══════════════════════════════════════════════

@@ -17,7 +17,7 @@ Item {
     // Background fetch from the Python script
     Process {
         id: fetchProc
-        command: ["python3", "/home/reaan/reaan-dotfiles/dot_config/scripts/get_weather.py"]
+        command: ["sh", "-c", "python3 ~/.config/scripts/get_weather.py"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -35,7 +35,7 @@ Item {
     // Fast local cache hydration
     Process {
         id: cacheLoader
-        command: ["cat", "/home/reaan/.cache/weather.json"]
+        command: ["sh", "-c", "cat ~/.cache/weather.json"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {

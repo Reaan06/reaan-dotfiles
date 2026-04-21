@@ -29,20 +29,26 @@ Item {
     Behavior on cBg { ColorAnimation { duration: 600 } }
 
     function parsePalette(raw) {
-        if (raw.length === 0) return
+        if (!raw || raw.length === 0) return
         var parts = raw.split(" ")
         if (parts.length < 8) return
-        var pc = parts[0]
-        cBg    = Qt.rgba(parseInt(pc.substr(1,2),16)/255, parseInt(pc.substr(3,2),16)/255, parseInt(pc.substr(5,2),16)/255, 0.4)
-        cBlue  = parts[1]
-        cMauve = parts[3]
-        cText  = parts[6]
-        cSub   = parts[7]
+        try {
+            var pc = parts[0]
+            if (pc && pc.startsWith("#") && pc.length >= 7) {
+                cBg = Qt.rgba(parseInt(pc.substr(1,2),16)/255, parseInt(pc.substr(3,2),16)/255, parseInt(pc.substr(5,2),16)/255, 0.4)
+            }
+            cBlue  = parts[1] || cBlue
+            cMauve = parts[3] || cMauve
+            cText  = parts[6] || cText
+            cSub   = parts[7] || cSub
+        } catch (e) {
+            console.log("Error parsing palette in WeatherCalendarView: " + e)
+        }
     }
 
     Process {
         id: paletteProc
-        command: ["sh", "-c", "cat $HOME/.cache/qs-palette 2>/dev/null"]
+        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
         stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
     }
     Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }

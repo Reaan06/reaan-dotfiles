@@ -58,20 +58,28 @@ Item {
     // Palette loader (same as StatusBar)
     Process {
         id: palProc
-        command: ["sh", "-c", "cat $HOME/.cache/qs-palette 2>/dev/null"]
+        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var parts = text.trim().split(" ")
+                var raw = text.trim()
+                if (!raw || raw.length === 0) return
+                var parts = raw.split(" ")
                 if (parts.length < 8) return
-                var pc = parts[0]
-                root.cPill = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
-                                     parseInt(pc.substr(3,2),16)/255,
-                                     parseInt(pc.substr(5,2),16)/255, 0.92)
-                root.cTeal   = parts[1]
-                root.cYellow = parts[4]
-                root.cPeach  = parts[4]
-                root.cText   = parts[6]
-                root.cSub    = parts[7]
+                try {
+                    var pc = parts[0]
+                    if (pc && pc.startsWith("#") && pc.length >= 7) {
+                        root.cPill = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
+                                             parseInt(pc.substr(3,2),16)/255,
+                                             parseInt(pc.substr(5,2),16)/255, 0.92)
+                    }
+                    root.cTeal   = parts[1] || root.cTeal
+                    root.cYellow = parts[4] || root.cYellow
+                    root.cPeach  = parts[4] || root.cPeach
+                    root.cText   = parts[6] || root.cText
+                    root.cSub    = parts[7] || root.cSub
+                } catch (e) {
+                    console.log("Error parsing palette in Osd: " + e)
+                }
             }
         }
     }

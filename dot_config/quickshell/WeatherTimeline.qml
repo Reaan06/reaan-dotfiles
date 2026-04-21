@@ -1,6 +1,8 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Quickshell
+import Quickshell.Io
 
 /**
  * @component WeatherTimeline
@@ -16,6 +18,34 @@ Item {
     implicitHeight: 200
     
     readonly property string font: "JetBrains Mono Nerd Font"
+    property color cBlue: "#89b4fa"
+    property color cMauve: "#cba6f7"
+    property color cText: "#cdd6f4"
+    property color cSub: "#6c7086"
+    property color cTeal: "#94e2d5"
+    property color cBg: Qt.rgba(0.1, 0.1, 0.15, 0.3)
+
+    function parsePalette(raw) {
+        if (!raw || raw.length === 0) return
+        var parts = raw.split(" ")
+        if (parts.length < 8) return
+        try {
+            cBlue  = parts[1] || cBlue
+            cTeal  = parts[2] || cTeal
+            cMauve = parts[3] || cMauve
+            cText  = parts[6] || cText
+            cSub   = parts[7] || cSub
+        } catch (e) {
+            console.log("Error parsing palette in WeatherTimeline: " + e)
+        }
+    }
+
+    Process {
+        id: paletteProc
+        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
+        stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
+    }
+    Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
 
     ColumnLayout {
         anchors.fill: parent
@@ -32,7 +62,7 @@ Item {
                 id: scrollThumb
                 height: parent.height
                 radius: parent.radius
-                color: "#cba6f7"
+                color: root.cMauve
                 
                 // Logic to calculate width and position
                 width: Math.max(40, (listView.width / listView.contentWidth) * listView.width)
@@ -47,7 +77,7 @@ Item {
             font.family: root.font
             font.pixelSize: 13
             font.bold: true
-            color: "#89b4fa"
+            color: root.cBlue
             opacity: 0.9
         }
 
@@ -81,7 +111,7 @@ Item {
                 height: 150
                 radius: 20
                 color: hourMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
-                border.color: hourMouse.containsMouse ? "#cba6f7" : Qt.rgba(1, 1, 1, 0.05)
+                border.color: hourMouse.containsMouse ? root.cMauve : Qt.rgba(1, 1, 1, 0.05)
                 border.width: 1
                 
                 Behavior on color { ColorAnimation { duration: 150 } }
@@ -94,7 +124,7 @@ Item {
                         text: modelData.hour || "--:--"
                         font.family: root.font
                         font.pixelSize: 11
-                        color: "#6c7086"
+                        color: root.cSub
                         Layout.alignment: Qt.AlignHCenter 
                     }
                     
@@ -106,7 +136,7 @@ Item {
                             return "󰖐"; 
                         }
                         font.pixelSize: 30
-                        color: modelData.rain > 30 ? "#89b4fa" : (modelData.temp > 22 ? "#f9e2af" : "#cdd6f4")
+                        color: modelData.rain > 30 ? root.cBlue : (modelData.temp > 22 ? "#f9e2af" : root.cText)
                         Layout.alignment: Qt.AlignHCenter 
                     }
                     
@@ -115,7 +145,7 @@ Item {
                         font.family: root.font
                         font.pixelSize: 18
                         font.bold: true
-                        color: "#cdd6f4"
+                        color: root.cText
                         Layout.alignment: Qt.AlignHCenter 
                     }
                     
@@ -127,7 +157,7 @@ Item {
                             text: (modelData.rain || 0) + "%"
                             font.family: root.font
                             font.pixelSize: 10
-                            color: "#94e2d5"
+                                 color: root.cTeal
                         }
                     }
                 }

@@ -21,17 +21,19 @@ def get_stats():
         idle2, total2 = int(line2[4]), sum(map(int, line2[1:]))
         cpu_perc = round(100 * (1 - (idle2 - idle1) / (total2 - total1)), 1)
         
-        # Temp CPU: Promedio de los nucleos (Core X)
+        # Temp CPU: Promedio de los nucleos (Core X) o lectura de thermal_zone
         cpu_temp = 0
-        core_temps = []
-        sensors_out = subprocess.check_output("sensors", shell=True).decode()
-        for line in sensors_out.split('\n'):
-            if 'Core' in line and ':' in line:
-                try:
-                    t = float(line.split(':')[1].split('(')[0].replace('+', '').replace('°C', '').strip())
-                    core_temps.append(t)
-                except: pass
-        cpu_temp = sum(core_temps) / len(core_temps) if core_temps else 0
+        try:
+            temps = []
+            for tz in os.listdir('/sys/class/thermal/'):
+                if tz.startswith('thermal_zone'):
+                    try:
+                        with open(f'/sys/class/thermal/{tz}/type', 'r') as f: t_type = f.read().strip()
+                        if t_type in ['x86_pkg_temp', 'coretemp', 'acpitz']:
+                            with open(f'/sys/class/thermal/{tz}/temp', 'r') as f: temps.append(int(f.read().strip()) / 1000.0)
+                    except: pass
+            if temps: cpu_temp = max(temps)
+        except: pass
     except: cpu_name, cpu_perc, cpu_temp = "CPU", 0, 0
 
     # 2. GPU: Intel Iris Plus / AMD
@@ -41,22 +43,46 @@ def get_stats():
         
         # --- Intel Usage Logic (i915) ---
         if "Intel" in gpu_name:
-            # En Intel, el Package Temp es la temp real de la iGPU
-            sensors_out = subprocess.check_output("sensors", shell=True).decode()
-            for line in sensors_out.split('\n'):
-                if 'Package id 0' in line:
-                    gpu_temp = float(line.split(':')[1].split('(')[0].replace('+', '').replace('°C', '').strip())
-                    break
-            
-            # Uso de GPU: Frecuencia actual vs Maxima
+            # Temp de GPU específica (buscando en hwmon del dispositivo DRM)
             try:
-                # Buscamos la card correcta (usualmente card1 en tu sistema)
+                base = "/sys/class/drm/card1/device/hwmon/" if os.path.exists("/sys/class/drm/card1/device/hwmon/") else "/sys/class/drm/card0/device/hwmon/"
+                for hw in os.listdir(base):
+                    with open(os.path.join(base, hw, "temp1_input"), "r") as f:
+                        gpu_temp = int(f.read().strip()) / 1000.0
+                        break
+            except: pass
+            
+            # Fallback para temp si falla (intentar leer de la zona i915)
+            if gpu_temp == 0:
+                try:
+                    for tz in os.listdir('/sys/class/thermal/'):
+                        if tz.startswith('thermal_zone'):
+                            with open(f'/sys/class/thermal/{tz}/type', 'r') as f:
+                                if 'i915' in f.read():
+                                    with open(f'/sys/class/thermal/{tz}/temp', 'r') as f: gpu_temp = int(f.read().strip()) / 1000.0
+                                    break
+                except: pass
+
+            # Si sigue en 0, usamos la global del procesador como fallback
+            if gpu_temp == 0: gpu_temp = cpu_temp
+
+            # Uso de GPU: Frecuencia actual vs Maxima (ajustado por minimo para que idle sea 0%)
+            try:
                 p = "/sys/class/drm/card1/"
                 if not os.path.exists(p): p = "/sys/class/drm/card0/"
+                with open(p + "gt_act_freq_mhz", "r") as f: cur = float(f.read().strip())
+                with open(p + "gt_max_freq_mhz", "r") as f: mx = float(f.read().strip())
+                try:
+                    with open(p + "gt_min_freq_mhz", "r") as f: mn = float(f.read().strip())
+                except:
+                    mn = 300.0 # Valor típico mínimo para Intel
                 
-                with open(p + "gt_act_freq_mhz", "r") as f: cur = int(f.read().strip())
-                with open(p + "gt_max_freq_mhz", "r") as f: mx = int(f.read().strip())
-                gpu_perc = int((cur / mx) * 100) if mx > 0 else 0
+                if mx > mn:
+                    gpu_perc = int(((cur - mn) / (mx - mn)) * 100)
+                    if gpu_perc < 0: gpu_perc = 0
+                    if gpu_perc > 100: gpu_perc = 100
+                else:
+                    gpu_perc = 0
             except: gpu_perc = 0
         
         # --- AMD Fallback ---
@@ -66,7 +92,7 @@ def get_stats():
             # Temp AMD
             for h in os.listdir("/sys/class/hwmon/"):
                 if "amdgpu" in open(f"/sys/class/hwmon/{h}/name").read():
-                    gpu_temp = int(open(f"/sys/class/hwmon/{h}/temp1_input").read()) / 1000
+                    gpu_temp = int(open(f"/sys/class/hwmon/{h}/temp1_input").read()) / 1000.0
                     break
     except: pass
     

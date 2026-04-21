@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 
 // GitHubDashboardView: Full GitHub activity dashboard.
 // Displays contribution heatmap, streaks, activity feed, top repos, and stats.
@@ -27,6 +28,33 @@ Rectangle {
     property color cSub:     "#6c7086"
     property color cOverlay: "#45475a"
     property color cBg:      Qt.rgba(0.1, 0.1, 0.15, 0.3)
+
+    function parsePalette(raw) {
+        if (!raw || raw.length === 0) return
+        var parts = raw.split(" ")
+        if (parts.length < 8) return
+        try {
+            var pc = parts[0]
+            if (pc && pc.startsWith("#") && pc.length >= 7) {
+                cBg    = Qt.rgba(parseInt(pc.substr(1,2),16)/255, parseInt(pc.substr(3,2),16)/255, parseInt(pc.substr(5,2),16)/255, 0.4)
+            }
+            cBlue  = parts[1] || cBlue
+            cTeal  = parts[2] || cTeal
+            cMauve = parts[3] || cMauve
+            cPeach = parts[4] || cPeach
+            cText  = parts[6] || cText
+            cSub   = parts[7] || cSub
+        } catch (e) {
+            console.log("Error parsing palette in GitHubDashboardView: " + e)
+        }
+    }
+
+    Process {
+        id: paletteProc
+        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
+        stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
+    }
+    Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
 
     // Scroll state tracking
     property bool isHoveringList: false

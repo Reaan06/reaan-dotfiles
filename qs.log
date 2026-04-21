@@ -1,0 +1,7 @@
+Detected locale "C" with character encoding "ANSI_X3.4-1968", which is not UTF-8.
+Qt depends on a UTF-8 locale, and has switched to "C.UTF-8" instead.
+If this causes problems, reconfigure your locale. See the locale(1) manual
+for more information.
+[33m  WARN[0m: [31mQuickshell was built against Qt 6.10.2 but the system has updated to Qt 6.11.0 without rebuilding the package. This is likely to cause crashes, so the quickshell package must be rebuilt.
+
+Could not find "/home/reaan/.config/quickshell/shell.qml" config directory in any valid config path.

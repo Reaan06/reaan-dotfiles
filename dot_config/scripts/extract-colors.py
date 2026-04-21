@@ -74,7 +74,7 @@ def main():
     else:
         colors = [l.strip() for l in sys.stdin if l.strip().startswith('#')]
 
-    out_path = sys.argv[2] if len(sys.argv) >= 3 else os.path.expanduser('~/.cache/qs-palette')
+    out_path = sys.argv[2] if len(sys.argv) >= 3 else os.path.expanduser('~/.config/quickshell/.palette')
 
     if len(colors) < 4:
         palette = FALLBACK

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 
 Item {
     id: root
@@ -9,9 +10,36 @@ Item {
     readonly property string font: "JetBrains Mono Nerd Font"
     property color cMauve: "#cba6f7"
     property color cBlue: "#89b4fa"
+    property color cTeal: "#94e2d5"
     property color cText: "#cdd6f4"
     property color cSub: "#6c7086"
-    property color cBg: Qt.rgba(1, 1, 1, 0.03)
+    property color cBg: Qt.rgba(0.1, 0.1, 0.15, 0.4)
+
+    function parsePalette(raw) {
+        if (!raw || raw.length === 0) return
+        var parts = raw.split(" ")
+        if (parts.length < 8) return
+        try {
+            var pc = parts[0]
+            if (pc && pc.startsWith("#") && pc.length >= 7) {
+                cBg    = Qt.rgba(parseInt(pc.substr(1,2),16)/255, parseInt(pc.substr(3,2),16)/255, parseInt(pc.substr(5,2),16)/255, 0.4)
+            }
+            cBlue  = parts[1] || cBlue
+            cTeal  = parts[2] || cTeal
+            cMauve = parts[3] || cMauve
+            cText  = parts[6] || cText
+            cSub   = parts[7] || cSub
+        } catch (e) {
+            console.log("Error parsing palette in TemperatureHistoryView: " + e)
+        }
+    }
+
+    Process {
+        id: paletteProc
+        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
+        stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
+    }
+    Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
 
     ColumnLayout {
         anchors.fill: parent; spacing: 32

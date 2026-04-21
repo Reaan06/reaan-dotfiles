@@ -5,9 +5,9 @@
 IMAGE="$1"
 STATE="$HOME/.config/hypr/wallpaper-state.conf"
 EXTRACT="$HOME/.config/scripts/extract-colors.py"
-PALETTE="$HOME/.cache/qs-palette"
-PIDDIR="$HOME/.cache/swaybg-pids"
-mkdir -p "$PIDDIR"
+PALETTE="$HOME/.config/quickshell/.palette"
+PIDDIR="/tmp/swaybg-pids"
+mkdir -p "$PIDDIR" || true
 
 [ -z "$IMAGE" ] || [ ! -f "$IMAGE" ] && exit 1
 

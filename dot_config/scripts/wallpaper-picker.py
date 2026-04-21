@@ -17,7 +17,7 @@ EXTENSIONS = ("*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp")
 THUMB_W, THUMB_H = 460, 300
 EXTRACT_SCRIPT = os.path.expanduser("~/.config/scripts/extract-colors.py")
 HYPRPAPER_CONF = os.path.expanduser("~/.config/hypr/hyprpaper.conf")
-PALETTE_CACHE = os.path.expanduser("~/.cache/qs-palette")
+PALETTE_CACHE = os.path.expanduser("~/.config/quickshell/.palette")
 STATE_FILE = os.path.expanduser("~/.config/hypr/wallpaper-state.conf")
 
 CSS = """

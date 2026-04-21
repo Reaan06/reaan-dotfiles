@@ -14,6 +14,7 @@ Item {
 
     readonly property string font: "JetBrains Mono Nerd Font"
     property color cMauve:   "#cba6f7"
+    property color cBlue:    "#89b4fa"
     property color cGreen:   "#a6e3a1"
     property color cRed:     "#f38ba8"
     property color cYellow:  "#f9e2af"

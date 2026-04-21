@@ -17,7 +17,7 @@ NC='\033[0m'
 
 # ── Rutas ──
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_DIR="$(dirname "$SCRIPT_DIR")"
+DOTFILES_DIR="$SCRIPT_DIR"
 
 # ── Helpers ──
 header()  { echo -e "\n${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n  ${CYAN}$1${NC}\n${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"; }
@@ -125,55 +125,21 @@ CORE=(
     ttf-jetbrains-mono-nerd ttf-font-awesome
     noto-fonts noto-fonts-emoji
 
-    # Theming
-    qt5ct qt6ct kvantum papirus-icon-theme
-
     # Sistema
-    polkit-kde-agent
+    polkit-kde-agent base-devel cmake extra-cmake-modules
 
+    # Desarrollo / Audio Service
+    rust
+    
     # Archivos
     dolphin file-roller unzip unrar p7zip
 )
 
-CLI_TOOLS=(
-    eza bat ripgrep fd dust duf btop procs fzf
-)
-
-info "Paquetes core + Quickshell..."
-yay -S --needed --noconfirm "${CORE[@]}"
-
-info "Herramientas CLI modernas..."
-yay -S --needed --noconfirm "${CLI_TOOLS[@]}"
-
-[[ -n "$BROWSER" ]]    && { info "Instalando $BROWSER...";    yay -S --needed --noconfirm "$BROWSER"; }
-[[ -n "$EDITOR_PKG" ]] && { info "Instalando $EDITOR_PKG..."; yay -S --needed --noconfirm "$EDITOR_PKG"; }
-[[ "$_docker" == "s" ]] && { info "Instalando Docker..."; yay -S --needed --noconfirm docker docker-compose; sudo systemctl enable docker; sudo usermod -aG docker "$USER"; }
-[[ "$_steam" == "s" ]]  && { info "Instalando Steam...";  yay -S --needed --noconfirm steam; }
-
-ok "Todos los paquetes instalados"
-
 # ═══════════════════════════════════════════════════════════════
-#  Compilación e Instalación de eq-service
+#  Despliegue de Configuraciones (Early Phase)
 # ═══════════════════════════════════════════════════════════════
 
-header "Instalando Servicio de Audio (eq-service)"
-
-if [ -d "$DOTFILES_DIR/eq-service" ]; then
-    info "Compilando eq-service..."
-    cd "$DOTFILES_DIR/eq-service"
-    cargo build --release
-    sudo cp target/release/eq-service /usr/local/bin/
-    
-    info "Configurando servicio systemd para eq-service..."
-    mkdir -p "$HOME/.config/systemd/user"
-    cp eq-service.service "$HOME/.config/systemd/user/"
-    systemctl --user daemon-reload
-    systemctl --user enable --now eq-service
-    ok "eq-service instalado y servicio activado"
-else
-    warn "Directorio eq-service no encontrado. Saltando..."
-fi
-
+header "Desplegando Configuraciones"
 
 # Directorios destino
 mkdir -p ~/.config/{hypr,quickshell/components,kitty,rofi,swaync,nvim,cava,scripts,qt6ct}
@@ -184,15 +150,15 @@ mkdir -p ~/.cache
 deploy() {
     local src="$DOTFILES_DIR/$1"
     local dst="$2"
+    [ ! -e "$src" ] && { warn "No encontrado: $1 (saltando)"; return 0; }
+    
+    info "Desplegando $1..."
+    mkdir -p "$(dirname "$dst")" || true
     if [ -d "$src" ]; then
-        info "Desplegando $1..."
-        mkdir -p "$dst"
-        cp -rf "$src"/. "$dst"/
-    elif [ -f "$src" ]; then
-        info "Desplegando $1..."
-        cp -f "$src" "$dst"
+        mkdir -p "$dst" || true
+        cp -rf "$src"/. "$dst"/ 2>/dev/null || true
     else
-        warn "No encontrado: $1 (saltando)"
+        cp -f "$src" "$dst" 2>/dev/null || true
     fi
 }
 
@@ -206,6 +172,89 @@ deploy "dot_config/cava"        "$HOME/.config/cava"
 deploy "dot_config/scripts"     "$HOME/.config/scripts"
 deploy "dot_config/qt6ct"       "$HOME/.config/qt6ct"
 deploy "dot_zshrc"              "$HOME/.zshrc"
+
+chmod +x "$HOME/.config/scripts/"* 2>/dev/null || true
+chmod +x "$HOME/.config/hypr/scripts/"* 2>/dev/null || true
+
+ok "Configuraciones base desplegadas con éxito."
+
+# ═══════════════════════════════════════════════════════════════
+#  Instalación de Software
+# ═══════════════════════════════════════════════════════════════
+
+header "Instalando Paquetes"
+
+# Verificar bloqueo de pacman
+if [ -f /var/lib/pacman/db.lck ]; then
+    warn "El gestor de paquetes está bloqueado (/var/lib/pacman/db.lck)."
+    info "Si no hay otra instalación corriendo, ejecuta: sudo rm /var/lib/pacman/db.lck"
+    # No morimos aquí, intentamos seguir pero avisamos.
+fi
+
+CLI_TOOLS=(
+    eza bat ripgrep fd dust duf btop procs fzf
+)
+
+info "Sincronizando repositorios y actualizando el sistema (Full upgrade)..."
+# Usamos --overwrite "*" para evitar fallos por conflictos de archivos (como en gemini-cli)
+yay -Syu --noconfirm --overwrite "*"
+
+info "Instalando/Actualizando paquetes core + Quickshell..."
+yay -S --needed --noconfirm --overwrite "*" "${CORE[@]}"
+
+info "Herramientas CLI modernas..."
+yay -S --needed --noconfirm --overwrite "*" "${CLI_TOOLS[@]}"
+
+[[ -n "$BROWSER" ]]    && { info "Instalando $BROWSER...";    yay -S --needed --noconfirm --overwrite "*" "$BROWSER"; }
+[[ -n "$EDITOR_PKG" ]] && { info "Instalando $EDITOR_PKG..."; yay -S --needed --noconfirm --overwrite "*" "$EDITOR_PKG"; }
+[[ "$_docker" == "s" ]] && { info "Instalando Docker..."; yay -S --needed --noconfirm --overwrite "*" docker docker-compose; sudo systemctl enable docker; sudo usermod -aG docker "$USER"; }
+[[ "$_steam" == "s" ]]  && { info "Instalando Steam...";  yay -S --needed --noconfirm --overwrite "*" steam; }
+
+ok "Todos los paquetes instalados"
+
+# ═══════════════════════════════════════════════════════════════
+#  Fix Permanente para Quickshell (Qt ABI Mismatch)
+# ═══════════════════════════════════════════════════════════════
+
+if command -v quickshell &>/dev/null; then
+    # Chequear si quickshell alerta que debe ser recompilado por culpa de update de Qt
+    if quickshell -c /dev/null 2>&1 | grep -qi "must be rebuilt\|rebuild"; then
+        warn "Se detectó un desajuste de versión de Qt (Causa de que la barra desaparezca)."
+        info "Eliminando caché caché anterior y forzando la recompilación pura de quickshell-git..."
+        rm -rf "$HOME/.cache/yay/quickshell-git"
+        yay -S --noconfirm quickshell-git
+        ok "Quickshell recompilado estructuralmente para tu versión actual de Arch"
+    fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
+#  Compilación e Instalación de eq-service
+# ═══════════════════════════════════════════════════════════════
+
+header "Instalando Servicio de Audio (eq-service)"
+
+if [ -d "$DOTFILES_DIR/eq-service" ]; then
+    info "Compilando eq-service..."
+    cd "$DOTFILES_DIR/eq-service"
+    if command -v cargo &>/dev/null; then
+        cargo build --release
+        sudo cp target/release/eq-service /usr/local/bin/
+        
+        info "Configurando servicio systemd para eq-service..."
+        mkdir -p "$HOME/.config/systemd/user"
+        cp eq-service.service "$HOME/.config/systemd/user/"
+        systemctl --user daemon-reload
+        systemctl --user enable --now eq-service
+        ok "eq-service instalado y servicio activado"
+    else
+        fail "Cargo no encontrado. No se pudo compilar eq-service."
+    fi
+else
+    warn "Directorio eq-service no encontrado. Saltando..."
+fi
+
+# Las llamadas a deploy fueron movidas al bloque inicial 
+
 
 # Power menu script
 if [ -f "$DOTFILES_DIR/dot_config/hypr/scripts/screenshot.sh" ]; then
@@ -250,25 +299,29 @@ fi
 [ -f ~/.config/hypr/monitors.conf ] || echo "monitor=,preferred,auto,1" > ~/.config/hypr/monitors.conf
 
 # Generar paleta inicial desde wallpaper por defecto
-if [ -f "$HOME/.config/scripts/extract-colors.py" ] && command -v magick &>/dev/null; then
+if [ -f "$HOME/.config/scripts/extract-colors.py" ] && command -v magick &>/dev/null && command -v python3 &>/dev/null; then
     info "Generando paleta de colores inicial..."
-    DEFAULT_WP=$(ls ~/Pictures/wallpapers/*.{jpg,jpeg,png,webp} 2>/dev/null | head -1)
+    DEFAULT_WP=$(ls ~/Pictures/wallpapers/*.{jpg,jpeg,png,webp} 2>/dev/null | head -1 || true)
     if [ -n "$DEFAULT_WP" ]; then
         RAW=/tmp/qs-colors-raw
         magick "$DEFAULT_WP" -resize 200x200! -colors 8 -unique-colors -depth 8 txt:- 2>/dev/null \
-            | tail -n +2 | grep -oE '#[0-9A-Fa-f]{6}' | head -8 > "$RAW"
-        python3 "$HOME/.config/scripts/extract-colors.py" "$RAW" "$HOME/.cache/qs-palette" 2>/dev/null
+            | tail -n +2 | grep -oE '#[0-9A-Fa-f]{6}' | head -8 > "$RAW" || true
+        python3 "$HOME/.config/scripts/extract-colors.py" "$RAW" "$HOME/.config/quickshell/.palette" 2>/dev/null || true
         rm -f "$RAW"
+        
+        # Generar hyprpaper.conf básico si no existe
         MONITOR=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name' 2>/dev/null || echo 'eDP-1')
-        cat > "$HOME/.config/hypr/hyprpaper.conf" <<WPEOF
+        if [ ! -f "$HOME/.config/hypr/hyprpaper.conf" ]; then
+            cat > "$HOME/.config/hypr/hyprpaper.conf" <<WPEOF
 wallpaper {
     monitor = $MONITOR
     path = $DEFAULT_WP
 }
 WPEOF
-        ok "Paleta y wallpaper configurados"
+        fi
+        ok "Paleta y wallpaper inicial configurados"
     else
-        warn "No hay wallpapers en ~/Pictures/wallpapers/ — paleta por defecto"
+        warn "No hay wallpapers en ~/Pictures/wallpapers/ — saltando paleta inicial"
     fi
 fi
 
@@ -357,10 +410,23 @@ header "Instalación Completa"
 
 if [ "$all_ok" = true ]; then
     echo -e "  ${GREEN}✓ Todo instalado correctamente${NC}\n"
-    echo -e "  ${CYAN}Próximos pasos:${NC}"
-    echo -e "    1. ${YELLOW}Cerrar sesión${NC}"
-    echo -e "    2. Seleccionar ${YELLOW}Hyprland${NC} en el display manager"
-    echo -e "    3. Iniciar sesión\n"
+
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v hyprctl &>/dev/null; then
+        info "Inicializando entorno Hyprland en caliente..."
+        hyprctl reload &>/dev/null || true
+        killall -q hyprpaper swaync quickshell hypridle || true
+        nohup hyprpaper >/dev/null 2>&1 &
+        nohup swaync >/dev/null 2>&1 &
+        nohup hypridle >/dev/null 2>&1 &
+        nohup quickshell -d >/dev/null 2>&1 &
+        ok "Servicios y barra recargados con éxito\n"
+    else
+        echo -e "  ${CYAN}Próximos pasos:${NC}"
+        echo -e "    1. ${YELLOW}Cerrar sesión${NC}"
+        echo -e "    2. Seleccionar ${YELLOW}Hyprland${NC} en el display manager"
+        echo -e "    3. Iniciar sesión\n"
+    fi
+
     echo -e "  ${CYAN}Atajos principales:${NC}"
     echo -e "    ${YELLOW}Super + Return${NC}    Terminal"
     echo -e "    ${YELLOW}Super + F1${NC}        Audio Manager"

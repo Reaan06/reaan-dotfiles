@@ -41,7 +41,7 @@ def get_weather():
                 pass
 
         # Fetch APIs (Forecast + Archive)
-        forecast_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m&timezone=auto&forecast_days=16"
+        forecast_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m&timezone=auto&forecast_days=8"
         f_resp = requests.get(forecast_url, timeout=7).json()
 
         past_start = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')

@@ -4,103 +4,101 @@ import QtQuick.Controls
 
 /**
  * @component WeatherCalendar
- * @description Corrected interactive calendar with balanced centering.
- * Reduced item sizes to fit perfectly within the left sidebar without stretching.
+ * @description A high-end interactive calendar widget for the weather dashboard.
+ * Supports date selection and highlighting the current day.
  */
 Rectangle {
     id: root
-    
     property string selectedDate: ""
     property string todayDate: ""
     signal dateSelected(string date)
     
-    color: Qt.rgba(30/255, 30/255, 46/255, 0.4)
-    radius: 32
+    radius: 30
+    color: Qt.rgba(1, 1, 1, 0.03)
     border.color: Qt.rgba(1, 1, 1, 0.05)
     
     readonly property string font: "JetBrains Mono Nerd Font"
+    property color accentColor: "#cba6f7"
+    property color textColor: "#cdd6f4"
     
-    function getDateString(day) {
-        if (!day) return "";
-        let d = day < 10 ? "0" + day : day;
-        return "2026-04-" + d;
-    }
-
+    // Internal state
+    property date displayDate: new Date()
+    property var monthNames: ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
+    
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
+        anchors.margins: 20
         spacing: 15
-
-        // Compact Header
+        
+        // Header
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: "ABRIL 2026"
-                font.family: root.font; font.pixelSize: 18; font.bold: true
-                color: "#cba6f7"
+                text: root.monthNames[root.displayDate.getMonth()] + " " + root.displayDate.getFullYear()
+                font.family: root.font; font.pixelSize: 16; font.bold: true; color: root.accentColor
             }
             Item { Layout.fillWidth: true }
-            Rectangle {
-                width: 30; height: 30; radius: 8; color: Qt.rgba(1, 1, 1, 0.05)
-                Text { anchors.centerIn: parent; text: "󰸗"; color: "#cba6f7"; font.pixelSize: 15 }
-            }
-        }
-
-        // Perfectly centered grid of days
-        GridLayout {
-            columns: 7
-            columnSpacing: 6
-            rowSpacing: 6
-            Layout.alignment: Qt.AlignHCenter // Forces the grid to the center of the ColumnLayout
-
-            Repeater {
-                model: ["LU", "MA", "MI", "JU", "VI", "SA", "DO"]
-                Text {
-                    text: modelData
-                    font.family: root.font; font.pixelSize: 11; font.bold: true
-                    color: "#585b70"
-                    Layout.alignment: Qt.AlignHCenter
+            Row {
+                spacing: 8
+                Rectangle {
+                    width: 30; height: 30; radius: 10; color: Qt.rgba(1,1,1,0.05)
+                    Text { anchors.centerIn: parent; text: "󰁍"; color: root.textColor; rotation: 180 }
+                    MouseArea { anchors.fill: parent; onClicked: root.displayDate = new Date(root.displayDate.getFullYear(), root.displayDate.getMonth() - 1, 1) }
                 }
-            }
-
-            Repeater {
-                model: 30
-                delegate: Rectangle {
-                    id: dayRect
-                    Layout.preferredWidth: 32 // Compact size
-                    Layout.preferredHeight: 32
-                    radius: 10
-                    Layout.alignment: Qt.AlignHCenter
-                    
-                    readonly property string dateStr: root.getDateString(index + 1)
-                    readonly property bool isToday: dateStr === root.todayDate
-                    readonly property bool isSelected: dateStr === root.selectedDate
-                    
-                    color: isSelected ? "#cba6f7" : (dayMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
-                    border.color: isToday ? "#cba6f7" : "transparent"
-                    border.width: isToday ? 1 : 0
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: index + 1
-                        font.family: root.font; font.pixelSize: 12; font.bold: isSelected || isToday
-                        color: isSelected ? "#11111b" : (isToday ? "#cba6f7" : "#cdd6f4")
-                    }
-
-                    MouseArea {
-                        id: dayMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: root.dateSelected(dayRect.dateStr)
-                    }
-                    
-                    // Selected indicator
-                    Rectangle {
-                        anchors.bottom: parent.bottom; anchors.bottomMargin: 3; anchors.horizontalCenter: parent.horizontalCenter
-                        width: 3; height: 3; radius: 1.5; color: "#11111b"; visible: isSelected
-                    }
+                Rectangle {
+                    width: 30; height: 30; radius: 10; color: Qt.rgba(1,1,1,0.05)
+                    Text { anchors.centerIn: parent; text: "󰁍"; color: root.textColor }
+                    MouseArea { anchors.fill: parent; onClicked: root.displayDate = new Date(root.displayDate.getFullYear(), root.displayDate.getMonth() + 1, 1) }
                 }
             }
         }
         
-        Item { Layout.fillHeight: true }
+        // Grid
+        GridLayout {
+            columns: 7; Layout.fillWidth: true; Layout.fillHeight: true
+            rowSpacing: 2; columnSpacing: 2
+            
+            Repeater {
+                model: ["D", "L", "M", "M", "J", "V", "S"]
+                Text {
+                    Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter
+                    text: modelData; font.family: root.font; font.pixelSize: 10; font.bold: true; color: root.accentColor; opacity: 0.5
+                }
+            }
+            
+            Repeater {
+                id: daysRepeater
+                model: 42
+                delegate: Rectangle {
+                    Layout.fillWidth: true; Layout.preferredHeight: 32; radius: 10
+                    
+                    property date dateValue: {
+                        var firstDay = new Date(root.displayDate.getFullYear(), root.displayDate.getMonth(), 1).getDay()
+                        return new Date(root.displayDate.getFullYear(), root.displayDate.getMonth(), index - firstDay + 1)
+                    }
+                    property bool isCurrentMonth: dateValue.getMonth() === root.displayDate.getMonth()
+                    property string dateString: dateValue.getFullYear() + "-" + String(dateValue.getMonth() + 1).padStart(2, '0') + "-" + String(dateValue.getDate()).padStart(2, '0')
+                    property bool isSelected: root.selectedDate === dateString
+                    property bool isToday: root.todayDate === dateString
+                    
+                    color: isSelected ? root.accentColor : (isToday ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.15) : "transparent")
+                    opacity: isCurrentMonth ? 1 : 0.2
+                    border.color: isToday && !isSelected ? root.accentColor : "transparent"
+                    border.width: 1
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: dateValue.getDate()
+                        font.family: root.font; font.pixelSize: 12; font.bold: isSelected || isToday
+                        color: isSelected ? "#11111b" : root.textColor
+                    }
+                    
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.dateSelected(dateString)
+                    }
+                }
+            }
+        }
     }
 }
