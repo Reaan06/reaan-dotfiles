@@ -122,11 +122,13 @@ def update_time():
     
     if delta > 0:
         active_apps = set()
-        # Normalizar a minúsculas para evitar duplicados (Spotify vs spotify)
         if current_app: active_apps.add(current_app.lower())
         
         audio_apps = get_audio_apps()
         for app in audio_apps: active_apps.add(app.lower())
+        
+        # Guardar lista de apps activas para la UI
+        store["_active"] = list(active_apps)
 
         for p in ["daily", "weekly", "monthly"]:
             if "_total_" not in store[p]: store[p]["_total_"] = {"time": 0, "opens": 0}

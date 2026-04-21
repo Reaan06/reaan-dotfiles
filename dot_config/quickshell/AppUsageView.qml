@@ -18,6 +18,7 @@ Item {
     property string currentView: "daily"
     property var lastData: ({})
     property real totalTime: 0
+    property var activeAppList: []
 
     ListModel { id: appModel }
 
@@ -35,6 +36,7 @@ Item {
             if (!jsonStr || jsonStr.trim() === "") return
             var data = JSON.parse(jsonStr)
             root.lastData = data
+            root.activeAppList = data["_active"] || []
             refreshView()
         } catch(e) {
             console.log("AppUsageView JSON parse error: " + e)
@@ -61,16 +63,32 @@ Item {
             }
         }
         
-        // Fallback: si no hay _total_, suma el uso de las apps
         if (tTime === 0) {
             for (var j = 0; j < sorted.length; j++) tTime += sorted[j].time
         }
-        root.totalTime = tTime
+        if (tTime > root.totalTime) root.totalTime = tTime
 
         sorted.sort(function(a, b) { return b.time - a.time })
-        appModel.clear()
-        for (var i = 0; i < sorted.length; i++) {
-            appModel.append(sorted[i])
+        
+        // Actualización inteligente: solo avanzar, nunca retroceder
+        if (appModel.count === sorted.length) {
+            for (var i = 0; i < sorted.length; i++) {
+                var current = appModel.get(i)
+                if (current.name === sorted[i].name) {
+                    // Solo actualizamos si el dato en disco es mayor (evita saltos atrás)
+                    if (sorted[i].time > current.time) {
+                        appModel.setProperty(i, "time", sorted[i].time)
+                    }
+                    appModel.setProperty(i, "opens", sorted[i].opens)
+                } else {
+                    appModel.set(i, sorted[i])
+                }
+            }
+        } else {
+            appModel.clear()
+            for (var i = 0; i < sorted.length; i++) {
+                appModel.append(sorted[i])
+            }
         }
     }
 
@@ -93,8 +111,27 @@ Item {
     }
 
     Timer {
-        interval: 1200; running: true; repeat: true; triggeredOnStart: true
+        interval: 5000; running: true; repeat: true; triggeredOnStart: true
         onTriggered: { readerSh.running = false; readerSh.running = true }
+    }
+
+    // Timer de tiempo real (hace que los números corran mientras miras)
+    Timer {
+        interval: 1000; running: true; repeat: true
+        onTriggered: {
+            if (root.activeAppList.length > 0 && root.lastData && root.lastData[root.currentView]) {
+                // Incrementar tiempo total
+                root.totalTime += 1
+                
+                // Incrementar tiempo de cada app activa en el modelo
+                for (var i = 0; i < appModel.count; i++) {
+                    var item = appModel.get(i)
+                    if (root.activeAppList.indexOf(item.name) !== -1) {
+                        appModel.setProperty(i, "time", item.time + 1)
+                    }
+                }
+            }
+        }
     }
 
     // ─── UI ───────────────────────────────────────────────────────────
