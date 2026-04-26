@@ -36,8 +36,34 @@ def load_data():
             data = json.load(f)
             if "daily" not in data: # Migración forzada
                 return {"daily": {}, "weekly": {}, "monthly": {}, "_day": "", "_week": "", "_month": ""}
+            
+            # Limpieza y normalización de datos existentes
+            modified = False
+            for period in ["daily", "weekly", "monthly"]:
+                new_period_data = {}
+                for app_name, stats in data[period].items():
+                    if app_name.startswith("_"):
+                        new_period_data[app_name] = stats
+                        continue
+                    
+                    norm_name = normalize_name(app_name)
+                    if norm_name not in new_period_data:
+                        new_period_data[norm_name] = stats
+                    else:
+                        # Fusionar estadísticas
+                        new_period_data[norm_name]["time"] += stats.get("time", 0)
+                        new_period_data[norm_name]["opens"] += stats.get("opens", 0)
+                    
+                    if norm_name != app_name:
+                        modified = True
+                data[period] = new_period_data
+            
+            if modified:
+                save_data(data)
+                
             return data
-    except:
+    except Exception as e:
+        print(f"Error loading data: {e}", file=sys.stderr)
         return {"daily": {}, "weekly": {}, "monthly": {}, "_day": "", "_week": "", "_month": ""}
 
 def save_data(data):
@@ -90,14 +116,61 @@ last_save = time.time()
 
 import subprocess
 
-def get_audio_apps():
-    # Mapeo de nombres de reproductores a clases de ventana conocidas
+def normalize_name(name):
+    if not name: return ""
+    
+    # Mapeos específicos de clase/nombre a icono
     mapping = {
-        "chromium": "google-chrome",
-        "brave": "brave-browser",
+        "google-chrome": "google-chrome",
+        "chrome": "google-chrome",
+        "brave-browser": "brave-browser",
         "firefox": "firefox",
         "spotify": "spotify",
+        "obsidian": "obsidian",
+        "code-oss": "vscodium",
+        "vscodium": "vscodium",
+        "code": "visual-studio-code",
+        "thunar": "thunar",
+        "dolphin": "dolphin",
+        "kitty": "kitty",
+        "foot": "foot",
+        "alacritty": "alacritty",
+        "discord": "discord",
+        "vesktop": "vesktop",
+        "steam": "steam",
+        "pavucontrol": "multimedia-volume-control",
+        "blueman-manager": "blueman",
+        "org.freecad.freecad": "freecad",
+        "org.openscad.openscad": "openscad",
+        "com.reaan.wallpicker": "wallpaper",
+        "windsurf": "windsurf",
+        "cursor-url-handler": "cursor",
+        "sober": "sober",
     }
+    
+    # 1. Lowercase
+    name = name.lower()
+    
+    # 2. Quitar extensiones comunes
+    if name.endswith(".exe"): name = name[:-4]
+    
+    # 3. Quitar prefijos reverse-dns (org.kde.dolphin -> dolphin)
+    prefixes = ["org.kde.", "org.gnome.", "com.", "io.", "net.", "org.freecad.", "org.openscad.", "org.vinegarhq."]
+    for pref in prefixes:
+        if name.startswith(pref):
+            name = name[len(pref):]
+            break
+            
+    # 4. Limpieza de caracteres raros (ej: war thunder (vulkan -> war thunder)
+    if "(" in name: name = name.split("(")[0].strip()
+    
+    # 5. Espacios a guiones (mejor para iconos de sistema)
+    name = name.replace(" ", "-")
+    
+    # 6. Aplicar mapeo
+    return mapping.get(name, name)
+
+def get_audio_apps():
     try:
         output = subprocess.check_output(
             ["playerctl", "metadata", "--format", "{{playerName}}:{{status}}", "-a"],
@@ -107,25 +180,50 @@ def get_audio_apps():
         for line in output.strip().split('\n'):
             if ":Playing" in line:
                 raw_name = line.split(':')[0].lower().split('.')[0]
-                # Usar mapeo o el nombre raw
-                name = mapping.get(raw_name, raw_name)
+                name = normalize_name(raw_name)
                 if name: apps.append(name)
         return apps
     except: return []
 
+def get_package_counts():
+    try:
+        # Pacman (native)
+        pacman_out = subprocess.check_output(["pacman", "-Qn"], stderr=subprocess.DEVNULL).decode("utf-8")
+        pacman_count = len(pacman_out.strip().split("\n")) if pacman_out.strip() else 0
+        
+        # Yay/AUR (foreign)
+        yay_out = subprocess.check_output(["pacman", "-Qm"], stderr=subprocess.DEVNULL).decode("utf-8")
+        yay_count = len(yay_out.strip().split("\n")) if yay_out.strip() else 0
+        
+        return pacman_count, yay_count
+    except Exception as e:
+        print(f"Error getting package counts: {e}", file=sys.stderr)
+        return 0, 0
+
+last_pkg_check = 0
+
 def update_time():
-    global last_time, current_app
+    global last_time, current_app, last_pkg_check
     now = time.time()
     delta = now - last_time
     
     if delta > 14400: delta = 0
     
+    # Actualizar conteo de paquetes cada 5 minutos
+    if now - last_pkg_check > 300:
+        p_count, y_count = get_package_counts()
+        store["_pacman_count"] = p_count
+        store["_yay_count"] = y_count
+        last_pkg_check = now
+    
     if delta > 0:
         active_apps = set()
-        if current_app: active_apps.add(current_app.lower())
+        if current_app: 
+            norm_app = normalize_name(current_app)
+            if norm_app: active_apps.add(norm_app)
         
         audio_apps = get_audio_apps()
-        for app in audio_apps: active_apps.add(app.lower())
+        for app in audio_apps: active_apps.add(app)
         
         # Guardar lista de apps activas para la UI
         store["_active"] = list(active_apps)
@@ -175,9 +273,10 @@ while True:
                 if len(parts) >= 3:
                     app_class = parts[2].strip()
                     if app_class:
+                        app_name = normalize_name(app_class)
                         for p in ["daily", "weekly", "monthly"]:
-                            if app_class not in store[p]: store[p][app_class] = {"time": 0, "opens": 0}
-                            store[p][app_class]["opens"] += 1
+                            if app_name not in store[p]: store[p][app_name] = {"time": 0, "opens": 0}
+                            store[p][app_name]["opens"] += 1
                 save_data(store)
                 last_save = time.time()
 

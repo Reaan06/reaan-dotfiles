@@ -19,6 +19,8 @@ Item {
     property var lastData: ({})
     property real totalTime: 0
     property var activeAppList: []
+    property int pacmanCount: 0
+    property int yayCount: 0
 
     ListModel { id: appModel }
 
@@ -37,6 +39,8 @@ Item {
             var data = JSON.parse(jsonStr)
             root.lastData = data
             root.activeAppList = data["_active"] || []
+            root.pacmanCount = data["_pacman_count"] || 0
+            root.yayCount = data["_yay_count"] || 0
             refreshView()
         } catch(e) {
             console.log("AppUsageView JSON parse error: " + e)
@@ -192,6 +196,18 @@ Item {
                         font.family: root.fontFamily; font.pixelSize: 11
                         color: Qt.rgba(root.cSub.r, root.cSub.g, root.cSub.b, 0.6)
                     }
+                    Text {
+                        text: "• 󰮯 " + root.pacmanCount
+                        font.family: root.fontFamily; font.pixelSize: 11
+                        color: root.cBlue
+                        visible: root.pacmanCount > 0
+                    }
+                    Text {
+                        text: "• 󰣚 " + root.yayCount
+                        font.family: root.fontFamily; font.pixelSize: 11
+                        color: "#eba0ac" // Peach/Rose color for yay/AUR
+                        visible: root.yayCount > 0
+                    }
                 }
             }
             Item { Layout.fillWidth: true }
@@ -309,18 +325,22 @@ Item {
                             Image {
                                 id: appIcon
                                 anchors.fill: parent; anchors.margins: 4
-                                source: "image://icon/" + model.name
+                                // Limpieza rápida del nombre para la URL
+                                source: model.name ? "image://icon/" + model.name.toLowerCase() : ""
                                 fillMode: Image.PreserveAspectFit
                                 smooth: true; mipmap: true
-                                visible: status === Image.Ready
+                                // Si el icono es el cuadro morado/negro genérico de error, 
+                                // a veces tiene implicitWidth de 0 o 1, o el status es Error
+                                visible: status === Image.Ready && implicitWidth > 1
                             }
 
                             Text {
                                 anchors.centerIn: parent
-                                text: model.name.charAt(0).toUpperCase()
+                                // Fallback a la primera letra si no hay icono
+                                text: (model.name && model.name.length > 0) ? model.name.charAt(0).toUpperCase() : "?"
                                 font.family: root.fontFamily; font.pixelSize: 16; font.bold: true
                                 color: index === 0 ? root.cAccent : (index === 1 ? root.cBlue : root.cGreen)
-                                visible: appIcon.status !== Image.Ready
+                                visible: !appIcon.visible || appIcon.status === Image.Error
                             }
                         }
 
