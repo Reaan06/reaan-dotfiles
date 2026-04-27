@@ -11,9 +11,9 @@ Item {
     id: root
 
     // ═══════════════════════════════════════════════
-    // PALETA — Dinámica (se actualiza con el wallpaper)
-    // Formato de ~/.config/quickshell/.palette:
-    //   pill accent1 accent2 accent3 accent4 accent5 text sub
+    // PALETTE — Dynamic (Synchronized with Wallpaper)
+    // ~/.config/quickshell/.palette format:
+    // pill accent1 accent2 accent3 accent4 accent5 text sub
     // ═══════════════════════════════════════════════
     property color cPill:    Qt.rgba(0.16, 0.16, 0.18, 0.92)
     property color cHover:   Qt.rgba(0.22, 0.22, 0.25, 0.95)
@@ -29,7 +29,7 @@ Item {
     readonly property string font:    "JetBrains Mono Nerd Font"
 
     // ═══════════════════════════════════════════════
-    // ESTADO DEL SISTEMA
+    // SYSTEM STATE DEFINITIONS
     // ═══════════════════════════════════════════════
     property string sTime:    ""
     property string sDate:    ""
@@ -39,12 +39,12 @@ Item {
     property string sBt:      ""
     property int    sVol:     0
     property bool   sMute:    false
-    property int    sBri:     0
+    property int    sKbLang:  0 // Changed to int to match shell logic if needed, or keep string
     property string sWeather: ""
 
-    property string sKbLang:  "EN"
+    property string sKbLangStr: "EN"
 
-    // MPRIS state via playerctl
+    // MPRIS state via playerctl tracking
     property string mpTitle: ""
     property string mpArtist: ""
     property string mpArtUrl: ""
@@ -55,7 +55,7 @@ Item {
     property string _mpPrevTitle: ""
     property real   mpInfoOpacity: 1.0
 
-    // Live position ticker — increments every second while playing
+    // Live position ticker — Increments every second during active playback
     Timer {
         interval: 1000; running: root.mpPlaying && root.mpActive; repeat: true
         onTriggered: { if (root.mpPos < root.mpLen) root.mpPos++ }
@@ -85,7 +85,7 @@ Item {
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.updatePositions() }
 
     // ═══════════════════════════════════════════════
-    // PROCESOS DE ESTADO
+    // ASYNCHRONOUS STATE UPDATE PROCESSES
     // ═══════════════════════════════════════════════
 
     Timer {
@@ -97,7 +97,7 @@ Item {
         }
     }
 
-    // Palette (una sola vez)
+    // Palette fetch (triggered on startup and every 3s)
     Process {
         id: paletteProc
         command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
@@ -106,23 +106,23 @@ Item {
     Component.onCompleted: { paletteProc.running = true }
     Timer { interval: 3000; running: true; repeat: true; onTriggered: paletteProc.running = true }
 
-    // Layout de teclado actual
+    // Active keyboard layout monitoring
     Process {
         id: kbProc
         command: ["sh", "-c", "hyprctl devices -j 2>/dev/null | grep -oP '\"active_keymap\": \"\\K[^\"]+' | head -1"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var layout = text.trim().toLowerCase()
-                root.sKbLang = layout.indexOf("spanish") >= 0 ? "ES" : "EN"
+                root.sKbLangStr = layout.indexOf("spanish") >= 0 ? "ES" : "EN"
             }
         }
     }
     Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: kbProc.running = true }
 
-    // Acción: cambiar layout de teclado
+    // Action: Switch keyboard layout
     Process { id: aKbSwitch; command: ["hyprctl", "switchxkblayout", "all", "next"] }
 
-    // Batería
+    // Battery status
     Process {
         id: batProc
         command: ["sh", "-c", "echo $(cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1) $(cat /sys/class/power_supply/BAT*/status 2>/dev/null | head -1)"]
@@ -136,7 +136,7 @@ Item {
     }
     Timer { interval: 10000; running: true; repeat: true; triggeredOnStart: true; onTriggered: batProc.running = true }
 
-    // Red WiFi
+    // WiFi Network monitoring
     Process {
         id: netProc
         command: ["sh", "-c", "nmcli -t -f ACTIVE,NAME connection show --active 2>/dev/null | grep '^yes' | cut -d: -f2 | head -1"]
@@ -144,7 +144,7 @@ Item {
     }
     Timer { interval: 5000; running: true; repeat: true; triggeredOnStart: true; onTriggered: netProc.running = true }
 
-    // Bluetooth
+    // Bluetooth status
     Process {
         id: btProc
         command: ["sh", "-c", "bluetoothctl devices Connected 2>/dev/null | head -1 | cut -d' ' -f3-"]
@@ -152,7 +152,7 @@ Item {
     }
     Timer { interval: 5000; running: true; repeat: true; triggeredOnStart: true; onTriggered: btProc.running = true }
 
-    // Volumen (polling rápido 500ms para sincronizar con F-keys)
+    // Volume status (Polled at 500ms for responsiveness)
     Process {
         id: volProc
         command: ["sh", "-c", "echo $(pamixer --get-volume 2>/dev/null) $(pamixer --get-mute 2>/dev/null)"]
@@ -166,7 +166,7 @@ Item {
     }
     Timer { interval: 500; running: true; repeat: true; triggeredOnStart: true; onTriggered: volProc.running = true }
 
-    // Brillo (polling rápido 500ms para sincronizar con F-keys)
+    // Backlight/Brightness monitoring
     Process {
         id: briProc
         command: ["sh", "-c", "brightnessctl -m 2>/dev/null | cut -d, -f4 | tr -d '%'"]
@@ -176,7 +176,7 @@ Item {
     }
     Timer { interval: 500; running: true; repeat: true; triggeredOnStart: true; onTriggered: briProc.running = true }
 
-    // Clima
+    // Weather status
     Process {
         id: weatherProc
         command: ["sh", "-c", "curl -sf 'wttr.in/?format=%c+%t' 2>/dev/null | sed 's/+//g' | xargs"]
@@ -184,7 +184,7 @@ Item {
     }
     Timer { interval: 900000; running: true; repeat: true; triggeredOnStart: true; onTriggered: weatherProc.running = true }
 
-    // MPRIS — read output from mpris-follow.sh (started globally in shell.qml)
+    // MPRIS metadata — Parsed from mpris-follow.sh output
     Process {
         id: mprisProc
         command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-mpris 2>/dev/null"]
@@ -202,7 +202,7 @@ Item {
                     pos = isNaN(pos) ? 0 : pos
                     len = isNaN(len) ? 0 : len
 
-                    // Detect song change → trigger fade animation
+                    // Trigger fade animation on metadata change
                     if (newTitle !== root.mpTitle || newArtist !== root.mpArtist) {
                         root.mpInfoOpacity = 0.0
                         root._mpPrevTitle = root.mpTitle
@@ -213,7 +213,7 @@ Item {
                         root.mpLen = len
                         mpFadeIn.start()
                     } else {
-                        // Sync position only if drift > 3s (let local timer handle ticking)
+                        // Resync position if drift exceeds 3 seconds
                         if (Math.abs(pos - root.mpPos) > 3) root.mpPos = pos
                         root.mpLen = len
                     }
@@ -225,14 +225,14 @@ Item {
     }
     Timer { interval: 250; running: true; repeat: true; triggeredOnStart: true; onTriggered: mprisProc.running = true }
 
-    // Fade-in animation for song changes
+    // Fade-in animation for track transitions
     SequentialAnimation {
         id: mpFadeIn
         PauseAnimation { duration: 50 }
         NumberAnimation { target: root; property: "mpInfoOpacity"; to: 1.0; duration: 300; easing.type: Easing.OutCubic }
     }
 
-    // Acciones one-shot
+    // One-shot shell commands
     Process { id: aRofi;   command: ["rofi", "-show", "drun"] }
     Process { id: aPower;  command: ["sh", "-c", "~/.config/scripts/powermenu.sh"] }
     Process { id: aPavu;   command: ["pavucontrol"] }
@@ -245,7 +245,7 @@ Item {
     Process { id: aVolDn;  command: ["pamixer", "-d", "5"] }
 
     // ═══════════════════════════════════════════════
-    // FUNCIONES AUXILIARES
+    // HELPER FUNCTIONS
     // ═══════════════════════════════════════════════
     function batIcon() {
         if (sChg) return "󰂄"
@@ -269,8 +269,8 @@ Item {
         return str.length > max ? str.substring(0, max - 1) + "…" : str
     }
 
-    // Parsea la paleta dinámica desde el archivo de cache
-    // Formato: "#hex1 #hex2 #hex3 #hex4 #hex5 #hex6 #hex7 #hex8"
+    // Dynamic palette parser
+    // Format: "#hex1 #hex2 #hex3 #hex4 #hex5 #hex6 #hex7 #hex8"
     //           pill  acc1   acc2   acc3   acc4   acc5   text   sub
     property string _lastPalette: ""
     function parsePalette(raw) {
@@ -303,7 +303,7 @@ Item {
     }
 
     // ═══════════════════════════════════════════════
-    // LAYOUT — SIN fondo de barra, pills flotantes
+    // COMPONENT LAYOUT — Clean Pill-style floating UI
     // ═══════════════════════════════════════════════
     RowLayout {
         anchors.fill: parent
@@ -311,7 +311,7 @@ Item {
         anchors.rightMargin: 4
         spacing: 8
 
-        // ──────── 1. LOGO DISTRO (color fijo) ────────
+        // ── 1. Distro Logo Section ──
         Pill {
             pillColor: root.cPill; hoverColor: root.cHover
             hPad: 18; vPad: 14
@@ -323,7 +323,7 @@ Item {
             }
         }
 
-        // ──────── 2. WORKSPACES (grupos por monitor, estilo Caelestia) ────────
+        // ── 2. Workspace Indicator (Per-monitor grouping) ──
         Pill {
             pillColor: root.cPill; hoverEnabled: false; hPad: 6
             Row {
@@ -333,7 +333,7 @@ Item {
                     Rectangle {
                         required property int index
                         property int wsNum: index + 1
-                        // Detectar si este WS está activo usando módulo 10
+                        // Highlight if current WS matches index (relative to monitor offset)
                         property bool isActive: Hyprland.focusedWorkspace
                             && ((Hyprland.focusedWorkspace.id - 1) % 10 + 1) === wsNum
                         width: 26; height: 24; radius: 7
@@ -348,7 +348,7 @@ Item {
                         MouseArea {
                             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                // Calcular grupo del monitor actual
+                                // Dispatch to monitor-specific workspace group
                                 var active = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
                                 var group = Math.floor((active - 1) / 10) * 10
                                 Hyprland.dispatch("workspace " + (group + parent.wsNum))
@@ -359,7 +359,7 @@ Item {
             }
         }
 
-        // ──────── 3. MPRIS — art | info(2 líneas) | controles ────────
+        // ── 3. MPRIS Media Hub ──
         Pill {
             id: mprisPill
             visible: root.mpActive
@@ -369,12 +369,11 @@ Item {
             onScrolledDown: aMpPrev.running = true
             onClicked: aMpToggle.running = true
 
-            // Grupo Logo + Texto centrado
+            // Album Art and Metadata
             Row {
                 spacing: 8
                 anchors.verticalCenter: parent.verticalCenter
 
-                // Carátula del álbum
                 Rectangle {
                     width: 26; height: 26; radius: 5
                     color: Qt.rgba(1,1,1,0.05)
@@ -395,7 +394,6 @@ Item {
                     }
                 }
 
-                // Info: título arriba, duración abajo
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 1
@@ -424,7 +422,7 @@ Item {
                 anchors.bottom: parent.bottom
             }
 
-            // Controles centrados
+            // Playback Controls
             Row {
                 spacing: 0
                 Rectangle {
@@ -483,7 +481,7 @@ Item {
 
         Item { Layout.fillWidth: true }
 
-        // ──────── 4. RELOJ + FECHA + CLIMA (una sola caja) ────────
+        // ── 4. Unified Clock, Date & Weather ──
         Pill {
             id: clockPill
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
@@ -510,9 +508,7 @@ Item {
 
         Item { Layout.fillWidth: true }
 
-        // ──────── 5. CAJA UNIFICADA DERECHA ────────
-        // Tray + Teclado + WiFi + Bluetooth + Batería + Volumen
-        // Todo en un solo Rectangle con separadores internos
+        // ── 5. Right System Tray Cluster ──
         Rectangle {
             height: 36; radius: 10; color: root.cPill
             implicitWidth: sysRow.implicitWidth + 16
@@ -522,7 +518,7 @@ Item {
                 anchors.centerIn: parent
                 spacing: 0
 
-                // — System Tray (iconos de apps en segundo plano) —
+                // Background Application Icons
                 Repeater {
                     model: SystemTray.items
                     Item {
@@ -545,16 +541,15 @@ Item {
                     }
                 }
 
-                // Separador tras tray
                 Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
 
-                // — Teclado (click para alternar ES/EN) —
+                // Keyboard Layout Toggle
                 Item {
                     width: 42; height: 36
                     Row {
                         anchors.centerIn: parent; spacing: 4
                         Text { text: "󰌌"; font.family: root.font; font.pixelSize: 12; color: root.cTeal }
-                        Text { text: root.sKbLang; font.family: root.font; font.pixelSize: 11; font.bold: true; color: root.cTeal }
+                        Text { text: root.sKbLangStr; font.family: root.font; font.pixelSize: 11; font.bold: true; color: root.cTeal }
                     }
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -563,7 +558,7 @@ Item {
                 }
                 Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
 
-                // — WiFi (icon only) —
+                // WiFi Indicator
                 Item {
                     width: 30; height: 36
                     Text {
@@ -579,7 +574,7 @@ Item {
                 }
                 Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
 
-                // — Bluetooth (icon only) —
+                // Bluetooth Indicator
                 Item {
                     width: 30; height: 36
                     Text {
@@ -595,7 +590,7 @@ Item {
                 }
                 Rectangle { width: 1; height: 14; anchors.verticalCenter: parent.verticalCenter; color: Qt.rgba(1,1,1,0.08) }
 
-                // — Batería —
+                // Battery Status
                 Item {
                     width: batContent.implicitWidth + 12; height: 36
                     Row {
@@ -607,7 +602,7 @@ Item {
             }
         }
 
-        // ──────── 6. POWER (pill separada) ────────
+        // ── 6. Power Menu Trigger ──
         Pill {
             pillColor: root.cPill; hoverColor: Qt.rgba(0.95, 0.55, 0.66, 0.15); hPad: 10
             onClicked: aPower.running = true

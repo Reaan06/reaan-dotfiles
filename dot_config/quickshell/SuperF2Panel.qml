@@ -11,7 +11,7 @@ Item {
     readonly property string font: "JetBrains Mono Nerd Font"
     
     // ═══════════════════════════════════════════════
-    // THEME — 100% Dinámico con Animaciones
+    // DYNAMIC THEME ENGINE — With Smooth Transitions
     // ═══════════════════════════════════════════════
     property color cBg:      Qt.rgba(0.07, 0.07, 0.1, 0.90)
     property color cMauve:   "#cba6f7"
@@ -21,6 +21,7 @@ Item {
     property color cSub:     "#6c7086"
     property color cSurface: Qt.rgba(1, 1, 1, 0.05)
 
+    // Animated color properties
     Behavior on cBg { ColorAnimation { duration: 600 } }
     Behavior on cMauve { ColorAnimation { duration: 600 } }
     Behavior on cBlue { ColorAnimation { duration: 600 } }
@@ -59,7 +60,7 @@ Item {
     }
     Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
 
-    // ── State ──
+    // ── Application State ──
     property string currentTab: "WeatherCalendarView.qml"
     property bool isGithubTab: currentTab === "github"
 
@@ -71,7 +72,7 @@ Item {
     opacity: 0
     visible: opacity > 0
     
-    // internal state for animation
+    // Animation internal state variables
     property real _width: 0
     property real _height: 0
     property real _radius: 12
@@ -96,9 +97,9 @@ Item {
             from: ""; to: "visible"
             ParallelAnimation {
                 NumberAnimation { property: "opacity"; duration: 250; easing.type: Easing.OutCubic }
-                // Horizontal expansion
+                // Phase 1: Horizontal expansion from center
                 NumberAnimation { property: "_width"; duration: 450; easing.type: Easing.OutQuint }
-                // Vertical expansion
+                // Phase 2: Vertical staged reveal
                 SequentialAnimation {
                     PauseAnimation { duration: 80 }
                     NumberAnimation { property: "_height"; duration: 550; easing.type: Easing.OutBack; easing.amplitude: 1.05 }
@@ -132,7 +133,7 @@ Item {
         border.color: Qt.rgba(1,1,1,0.1); border.width: 1.5
         clip: true
 
-        // --- LÍNEA DE UNIÓN ---
+        // ── VISUAL ANCHOR BRIDGE ──
         Rectangle {
             id: unionLine
             width: root.pillWidth
@@ -147,15 +148,15 @@ Item {
         }
 
         ColumnLayout {
-            // Correct final content size to maintain proportionality
-            width: 1200 - 80 // 1200 total width - 40 margin on each side
+            // Precise layout dimensions to maintain content proportionality
+            width: 1200 - 80 // 1200px total width - 40px side margins
             height: 750 - 80
             anchors.top: parent.top
             anchors.topMargin: 40
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 24
 
-            // ── Header ──
+            // ── Primary Header Section ──
             RowLayout {
                 Layout.fillWidth: true; spacing: 20
                 Row {
@@ -172,6 +173,7 @@ Item {
                 }
                 Item { Layout.fillWidth: true }
                 
+                // GitHub Connection Status Indicator
                 Rectangle {
                     width: 10; height: 10; radius: 5
                     color: ghManager.connected ? root.cGreen : root.cSub
@@ -181,6 +183,7 @@ Item {
                     ToolTip.text: ghManager.connected ? "GitHub: " + ghManager.profile.login : "GitHub: Not connected"
                 }
 
+                // Close Button
                 Rectangle {
                     width: 44; height: 44; radius: 10; color: root.cSurface
                     Text { anchors.centerIn: parent; text: "󰅖"; font.family: root.font; font.pixelSize: 18; color: root.cText }
@@ -193,7 +196,7 @@ Item {
 
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.08) }
 
-            // ── Content Area ──
+            // ── Main Content Viewport ──
             Item {
                 id: contentArea; Layout.fillWidth: true; Layout.fillHeight: true
                 Loader { id: mainLoader; anchors.fill: parent; active: !root.isGithubTab && root.currentTab !== "AppUsageView.qml"; visible: active; source: (root.isGithubTab || root.currentTab === "AppUsageView.qml") ? "" : root.currentTab }
@@ -204,7 +207,7 @@ Item {
 
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.08) }
 
-            // ── Tab Bar ──
+            // ── Navigation Tab Bar ──
             RowLayout {
                 Layout.fillWidth: true; spacing: 16; Layout.alignment: Qt.AlignHCenter
 
@@ -213,12 +216,12 @@ Item {
                         { name: "SYSTEM",  icon: "󰍛", tab: "SystemMonitor.qml",      accent: root.cBlue },
                         { name: "CLIMA",   icon: "󰖐", tab: "WeatherCalendarView.qml", accent: root.cMauve },
                         { name: "GITHUB",  icon: "󰊤", tab: "github",                 accent: root.cGreen },
-                        { name: "Uso de Apps", icon: "󰣆", tab: "AppUsageView.qml", accent: "#f38ba8" }
+                        { name: "APPS",    icon: "󰣆", tab: "AppUsageView.qml",       accent: "#f38ba8" }
                     ]
 
                     Rectangle {
                         id: tabBtn
-                        Layout.preferredWidth: 160; Layout.preferredHeight: 50; radius: 16
+                        Layout.preferredWidth: 160; Layout.preferredHeight: 50; radius: 10
                         property bool isActive: root.currentTab === modelData.tab
                         
                         color: isActive ? modelData.accent : root.cSurface

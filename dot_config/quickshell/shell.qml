@@ -1,15 +1,9 @@
-import Quickshell
-import Quickshell.Wayland
-import Quickshell.Io
-import QtQuick
-
-// Punto de entrada de Quickshell.
-// Variants crea una instancia de PanelWindow por cada monitor conectado.
-// Cuando se conecta/desconecta un monitor, Quickshell gestiona el ciclo
-// de vida automáticamente.
+// Quickshell Entry Point.
+// Variants creates a PanelWindow instance for each connected monitor.
+// Quickshell automatically manages the lifecycle when monitors are connected or disconnected.
 
 ShellRoot {
-    // ── Global state for AudioManager & Super F2 ──
+    // ── Global State Management for AudioManager & Super F2 ──
     property bool audioManagerVisible: false
     property bool superF2Visible: false
     property string _lastAmState: ""
@@ -42,14 +36,14 @@ ShellRoot {
     property var mprisData: ({})
     property var clockData: ({})
 
-    // ── Global: start MPRIS follow daemon (once, not per-monitor) ──
+    // ── Background Services: Start MPRIS follow daemon (singleton) ──
     Process {
         id: mprisStart
         command: ["sh", "-c", "~/.config/scripts/mpris-follow.sh &"]
     }
     Component.onCompleted: mprisStart.running = true
 
-    // ── Top bar (one per monitor) ──
+    // ── Top Bar: Primary Status Interface (per-monitor) ──
     Variants {
         model: Quickshell.screens
 
@@ -91,7 +85,7 @@ ShellRoot {
         }
     }
 
-    // ── OSD overlay (volume/brightness, right edge, one per monitor) ──
+    // ── OSD Overlay: Volume/Brightness feedback (right edge, per-monitor) ──
     Variants {
         model: Quickshell.screens
 
@@ -123,7 +117,7 @@ ShellRoot {
         }
     }
 
-    // ── AudioManager popup (top-left, one per monitor, visibility controlled by shell state) ──
+    // ── AudioManager Popup: Media control interface (anchored to top-left) ──
     Variants {
         model: Quickshell.screens
 
@@ -161,7 +155,7 @@ ShellRoot {
         }
     }
 
-    // ── Super F2 Panel popup (center-top, one per monitor, visibility controlled by shell state) ──
+    // ── Super F2 Panel: System Dashboard & Weather (centered overlay) ──
     Variants {
         model: Quickshell.screens
 
@@ -174,8 +168,7 @@ ShellRoot {
             visible: superF2Visible || f2Content.animating
 
             anchors.top: true
-            // Removing left/right anchors lets the compositor center it horizontally
-            // based on the explicit width.
+            // Removing left/right anchors allows centering based on width
             
             margins.top: 50
 
