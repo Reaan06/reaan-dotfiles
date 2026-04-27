@@ -63,22 +63,104 @@ Item {
     property string currentTab: "WeatherCalendarView.qml"
     property bool isGithubTab: currentTab === "github"
 
+    property bool opened: false
+    readonly property bool animating: animIn.running || animOut.running
+    property real originX: 600
+    property real pillWidth: 200
+
+    opacity: 0
+    visible: opacity > 0
+    
+    // internal state for animation
+    property real _width: 0
+    property real _height: 0
+    property real _radius: 12
+
+    states: [
+        State {
+            name: "visible"
+            when: root.opened
+            PropertyChanges { 
+                target: root
+                opacity: 1
+                _width: 1200
+                _height: 750
+                _radius: 24
+            }
+        }
+    ]
+
+    transitions: [
+        Transition {
+            id: animIn
+            from: ""; to: "visible"
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; duration: 250; easing.type: Easing.OutCubic }
+                // Horizontal expansion
+                NumberAnimation { property: "_width"; duration: 450; easing.type: Easing.OutQuint }
+                // Vertical expansion
+                SequentialAnimation {
+                    PauseAnimation { duration: 80 }
+                    NumberAnimation { property: "_height"; duration: 550; easing.type: Easing.OutBack; easing.amplitude: 1.05 }
+                }
+                NumberAnimation { property: "_radius"; duration: 400; easing.type: Easing.OutCubic }
+            }
+        },
+        Transition {
+            id: animOut
+            from: "visible"; to: ""
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; duration: 300; easing.type: Easing.InCubic }
+                NumberAnimation { property: "_width"; duration: 300; easing.type: Easing.InCubic }
+                NumberAnimation { property: "_height"; duration: 300; easing.type: Easing.InCubic }
+                NumberAnimation { property: "_radius"; duration: 300; easing.type: Easing.InCubic }
+            }
+        }
+    ]
+
     GitHubManager { id: ghManager }
 
     Rectangle {
         id: container
-        anchors.fill: parent; radius: 40; color: root.cBg
+        width: root._width
+        height: root._height
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        radius: root._radius
+        
+        color: root.cBg
         border.color: Qt.rgba(1,1,1,0.1); border.width: 1.5
+        clip: true
+
+        // --- LÍNEA DE UNIÓN ---
+        Rectangle {
+            id: unionLine
+            width: root.pillWidth
+            height: 4
+            radius: 2
+            color: root.cMauve
+            anchors.top: parent.top
+            anchors.topMargin: -2
+            x: root.originX - (width / 2)
+            visible: root.opened
+            opacity: root.opacity
+        }
 
         ColumnLayout {
-            anchors.fill: parent; anchors.margins: 40; spacing: 24
+            // Correct final content size to maintain proportionality
+            width: 1200 - 80 // 1200 total width - 40 margin on each side
+            height: 750 - 80
+            anchors.top: parent.top
+            anchors.topMargin: 40
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 24
 
             // ── Header ──
             RowLayout {
                 Layout.fillWidth: true; spacing: 20
                 Row {
                     spacing: 12
-                    Rectangle { width: 48; height: 48; radius: 14; color: root.cMauve
+                    Rectangle { width: 48; height: 48; radius: 10; color: root.cMauve
                         Text { anchors.centerIn: parent; text: "󰍛"; font.pixelSize: 24; color: "#11111b" }
                         Behavior on color { ColorAnimation { duration: 600 } }
                     }
@@ -100,7 +182,7 @@ Item {
                 }
 
                 Rectangle {
-                    width: 44; height: 44; radius: 14; color: root.cSurface
+                    width: 44; height: 44; radius: 10; color: root.cSurface
                     Text { anchors.centerIn: parent; text: "󰅖"; font.family: root.font; font.pixelSize: 18; color: root.cText }
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor

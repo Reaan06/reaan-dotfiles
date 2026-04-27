@@ -61,6 +61,29 @@ Item {
         onTriggered: { if (root.mpPos < root.mpLen) root.mpPos++ }
     }
 
+    property real mprisCenterX: 0
+    property real mprisWidth: 0
+    property real clockCenterX: 0
+    property real clockWidth: 0
+
+    onMpActiveChanged: updatePositions()
+    onWidthChanged: updatePositions()
+
+    function updatePositions() {
+        if (mprisPill.visible) {
+            var mPos = mprisPill.mapToItem(null, mprisPill.width / 2, 0)
+            mprisCenterX = mPos.x + 16
+            mprisWidth = mprisPill.width
+        }
+        if (clockPill.visible) {
+            var cPos = clockPill.mapToItem(null, clockPill.width / 2, 0)
+            clockCenterX = cPos.x + 16
+            clockWidth = clockPill.width
+        }
+    }
+
+    Timer { interval: 1000; running: true; repeat: true; onTriggered: root.updatePositions() }
+
     // ═══════════════════════════════════════════════
     // PROCESOS DE ESTADO
     // ═══════════════════════════════════════════════
@@ -313,7 +336,7 @@ Item {
                         // Detectar si este WS está activo usando módulo 10
                         property bool isActive: Hyprland.focusedWorkspace
                             && ((Hyprland.focusedWorkspace.id - 1) % 10 + 1) === wsNum
-                        width: 26; height: 24; radius: 8
+                        width: 26; height: 24; radius: 7
                         color: isActive ? Qt.rgba(0.58, 0.89, 0.84, 0.30) : "transparent"
                         Behavior on color { ColorAnimation { duration: 150 } }
                         Text {
@@ -338,6 +361,7 @@ Item {
 
         // ──────── 3. MPRIS — art | info(2 líneas) | controles ────────
         Pill {
+            id: mprisPill
             visible: root.mpActive
             pillColor: root.cPill; hoverColor: root.cHover; hPad: 18
 
@@ -352,7 +376,7 @@ Item {
 
                 // Carátula del álbum
                 Rectangle {
-                    width: 26; height: 26; radius: 6
+                    width: 26; height: 26; radius: 5
                     color: Qt.rgba(1,1,1,0.05)
                     clip: true
                     opacity: root.mpInfoOpacity
@@ -404,7 +428,7 @@ Item {
             Row {
                 spacing: 0
                 Rectangle {
-                    width: 24; height: 36; radius: 9
+                    width: 24; height: 36; radius: 8
                     color: hoverAreaPrev.containsMouse ? Qt.rgba(1,1,1,0.1) : "transparent"
                     Behavior on color { ColorAnimation { duration: 150 } }
                     Text {
@@ -421,7 +445,7 @@ Item {
                     }
                 }
                 Rectangle {
-                    width: 32; height: 36; radius: 9
+                    width: 32; height: 36; radius: 8
                     color: hoverAreaPlay.containsMouse ? Qt.rgba(0.58, 0.89, 0.84, 0.2) : "transparent"
                     Behavior on color { ColorAnimation { duration: 150 } }
                     Text {
@@ -438,7 +462,7 @@ Item {
                     }
                 }
                 Rectangle {
-                    width: 24; height: 36; radius: 9
+                    width: 24; height: 36; radius: 8
                     color: hoverAreaNext.containsMouse ? Qt.rgba(1,1,1,0.1) : "transparent"
                     Behavior on color { ColorAnimation { duration: 150 } }
                     Text {
@@ -461,6 +485,7 @@ Item {
 
         // ──────── 4. RELOJ + FECHA + CLIMA (una sola caja) ────────
         Pill {
+            id: clockPill
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             pillColor: root.cPill; hPad: 16
 
@@ -489,7 +514,7 @@ Item {
         // Tray + Teclado + WiFi + Bluetooth + Batería + Volumen
         // Todo en un solo Rectangle con separadores internos
         Rectangle {
-            height: 36; radius: 12; color: root.cPill
+            height: 36; radius: 10; color: root.cPill
             implicitWidth: sysRow.implicitWidth + 16
 
             Row {

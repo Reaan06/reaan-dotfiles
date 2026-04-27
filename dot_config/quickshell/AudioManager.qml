@@ -65,6 +65,65 @@ Item {
     property string mpSource: "System"; property string btDevice: "Built-in Audio"
     property var eqBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; property string activePreset: "Flat"
 
+    property bool opened: false
+    readonly property bool animating: animIn.running || animOut.running
+    property real originX: 250
+    property real pillWidth: 150
+
+    opacity: 0
+    visible: opacity > 0
+
+    // internal state for animation
+    property real _width: 0
+    property real _height: 0
+    property real _x: originX
+    property real _radius: 12
+
+    states: [
+        State {
+            name: "visible"
+            when: root.opened
+            PropertyChanges { 
+                target: root
+                opacity: 1
+                _width: 500
+                _height: 650
+                _x: 0
+                _radius: 20
+            }
+        }
+    ]
+
+    transitions: [
+        Transition {
+            id: animIn
+            from: ""; to: "visible"
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; duration: 200; easing.type: Easing.OutCubic }
+                // Horizontal expansion first (faster)
+                NumberAnimation { property: "_width"; duration: 400; easing.type: Easing.OutQuint }
+                NumberAnimation { property: "_x"; duration: 400; easing.type: Easing.OutQuint }
+                // Vertical expansion (slightly delayed/slower)
+                SequentialAnimation {
+                    PauseAnimation { duration: 50 }
+                    NumberAnimation { property: "_height"; duration: 500; easing.type: Easing.OutBack; easing.amplitude: 1.1 }
+                }
+                NumberAnimation { property: "_radius"; duration: 400; easing.type: Easing.OutCubic }
+            }
+        },
+        Transition {
+            id: animOut
+            from: "visible"; to: ""
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; duration: 300; easing.type: Easing.InCubic }
+                NumberAnimation { property: "_width"; duration: 300; easing.type: Easing.InCubic }
+                NumberAnimation { property: "_x"; duration: 300; easing.type: Easing.InCubic }
+                NumberAnimation { property: "_height"; duration: 300; easing.type: Easing.InCubic }
+                NumberAnimation { property: "_radius"; duration: 300; easing.type: Easing.InCubic }
+            }
+        }
+    ]
+
     // ── DATA SYNC ──
     Process {
         id: mprisProc; command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-mpris 2>/dev/null"]
@@ -107,11 +166,38 @@ Item {
 
     // ── UI ──
     Rectangle {
-        id: mainContainer; anchors.fill: parent; radius: 36; color: root.cPill
+        id: mainContainer
+        width: root._width
+        height: root._height
+        x: root._x
+        radius: root._radius
+        
+        color: root.cPill
         border.color: Qt.rgba(1,1,1,0.1); border.width: 1
+        clip: true // Critical for the 'expanding' look
+
+        // --- LÍNEA DE UNIÓN ---
+        Rectangle {
+            id: unionLine
+            width: root.pillWidth
+            height: 4
+            radius: 2
+            color: root.cMauve
+            anchors.top: parent.top
+            anchors.topMargin: -2
+            x: root.originX - (width / 2) - mainContainer.x
+            visible: root.opened
+            opacity: root.opacity
+        }
 
         ColumnLayout {
-            anchors.fill: parent; anchors.margins: 32; spacing: 20
+            // Correct final content size to maintain proportionality
+            width: 500 - 64 // 500 total width - 32 margin on each side
+            height: 650 - 64
+            anchors.top: parent.top
+            anchors.topMargin: 32
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 20
             RowLayout {
                 Layout.fillWidth: true; spacing: 28; Layout.alignment: Qt.AlignHCenter
                 Item {

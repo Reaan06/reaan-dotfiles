@@ -39,6 +39,9 @@ ShellRoot {
     }
     Timer { interval: 250; running: true; repeat: true; triggeredOnStart: true; onTriggered: amStateProc.running = true }
 
+    property var mprisData: ({})
+    property var clockData: ({})
+
     // ── Global: start MPRIS follow daemon (once, not per-monitor) ──
     Process {
         id: mprisStart
@@ -74,6 +77,16 @@ ShellRoot {
 
             StatusBar {
                 anchors.fill: parent
+                onMprisCenterXChanged: {
+                    var d = mprisData
+                    d[modelData.name] = { center: mprisCenterX, width: mprisWidth }
+                    mprisData = d
+                }
+                onClockCenterXChanged: {
+                    var d = clockData
+                    d[modelData.name] = { center: clockCenterX, width: clockWidth }
+                    clockData = d
+                }
             }
         }
     }
@@ -120,7 +133,7 @@ ShellRoot {
             property var modelData
             screen: modelData
 
-            visible: audioManagerVisible
+            visible: audioManagerVisible || amContent.animating
 
             anchors {
                 top: true
@@ -128,7 +141,7 @@ ShellRoot {
             }
 
             margins {
-                top: 60
+                top: 50
                 left: 16
             }
 
@@ -139,7 +152,11 @@ ShellRoot {
             color: "transparent"
 
             AudioManager {
+                id: amContent
                 anchors.fill: parent
+                opened: audioManagerVisible
+                originX: (mprisData[modelData.name] ? mprisData[modelData.name].center : 250) - 16
+                pillWidth: mprisData[modelData.name] ? mprisData[modelData.name].width : 150
             }
         }
     }
@@ -154,13 +171,13 @@ ShellRoot {
             property var modelData
             screen: modelData
 
-            visible: superF2Visible
+            visible: superF2Visible || f2Content.animating
 
             anchors.top: true
             // Removing left/right anchors lets the compositor center it horizontally
             // based on the explicit width.
             
-            margins.top: 60
+            margins.top: 50
 
             width: 1200
             height: 750
@@ -169,7 +186,11 @@ ShellRoot {
             color: "transparent"
 
             SuperF2Panel {
+                id: f2Content
                 anchors.fill: parent
+                opened: superF2Visible
+                originX: (clockData[modelData.name] ? clockData[modelData.name].center : (bar.width / 2)) - (bar.width - 1200)/2 - 16
+                pillWidth: clockData[modelData.name] ? clockData[modelData.name].width : 200
             }
         }
     }
