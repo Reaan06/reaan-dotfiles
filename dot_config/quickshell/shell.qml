@@ -88,23 +88,23 @@ ShellRoot {
             property var modelData
             screen: modelData
 
-            anchors {
-                top: true
-                right: true
-                bottom: true
+            visible: osdContent.osdVisible
+
+            anchors.right: true
+            
+            margins {
+                top: 250 // Offset from top to avoid overlapping Dashboard close button
+                right: 12
             }
 
-            margins {
-                top: 60
-                right: 12
-                bottom: 60
-            }
+            width: 60
+            height: 300
 
             exclusionMode: ExclusionMode.Ignore
-            implicitWidth: 56
             color: "transparent"
 
             Osd {
+                id: osdContent
                 anchors.fill: parent
             }
         }
@@ -132,8 +132,8 @@ ShellRoot {
                 left: 16
             }
 
-            implicitWidth: 500
-            implicitHeight: 650
+            width: 500
+            height: 650
 
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
@@ -156,26 +156,20 @@ ShellRoot {
 
             visible: superF2Visible
 
-            anchors {
-                top: true
-                left: true
-                right: true
-            }
+            anchors.top: true
+            // Removing left/right anchors lets the compositor center it horizontally
+            // based on the explicit width.
+            
+            margins.top: 60
 
-            margins {
-                top: 60
-            }
-
-            // Window itself spans full width (transparent), content is centered inside
-            implicitHeight: 750
+            width: 1200
+            height: 750
 
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
 
             SuperF2Panel {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: 1200
-                height: 700
+                anchors.fill: parent
             }
         }
     }
