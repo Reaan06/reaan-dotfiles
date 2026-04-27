@@ -5,7 +5,14 @@ import socket
 import time
 import glob
 import sys
+import subprocess
+import threading
 from datetime import datetime
+
+"""
+app_tracker.py — Rastreador mejorado de uso de aplicaciones via Hyprland IPC.
+Soporta detección por clase y título, normalización recursiva y heartbeat constante.
+"""
 
 CACHE_FILE = os.path.expanduser('~/.cache/app_usage.json')
 
@@ -28,147 +35,88 @@ def find_hyprland_socket():
     if sockets: return sockets[0]
     return None
 
+def normalize_name(cls_name, title=""):
+    # Priorizar clase, si no hay, usar título
+    raw_name = cls_name if cls_name else title
+    if not raw_name: return ""
+    
+    name = raw_name.lower().strip()
+    
+    # --- 1. Palabras clave de alta prioridad (Fuzzy matching) ---
+    if any(x in name for x in ["sober", "roblox", "vinegar"]):
+        return "sober"
+    
+    if "chrome" in name or "chromium" in name: return "google-chrome"
+    if "brave" in name: return "brave-browser"
+    if "firefox" in name: return "firefox"
+    if "vscodium" in name or "code-oss" in name: return "vscodium"
+    if "visual studio code" in name or "vscode" in name: return "visual-studio-code"
+    if "cursor" in name: return "cursor"
+    if "windsurf" in name: return "windsurf"
+    if "discord" in name or "vesktop" in name: return "discord"
+    if "spotify" in name: return "spotify"
+    if "steam" in name: return "steam"
+
+    # --- 2. Limpieza recursiva de prefijos DNS ---
+    while True:
+        found_prefix = False
+        for pref in ["org.", "com.", "io.", "net.", "gov.", "edu.", "ai."]:
+            if name.startswith(pref):
+                parts = name.split(".")
+                if len(parts) > 1:
+                    name = ".".join(parts[1:])
+                    found_prefix = True
+                    break
+        if not found_prefix: break
+
+    # --- 3. Limpieza de extensiones y sufijos ---
+    if name.endswith(".exe"): name = name[:-4]
+    if "(" in name: name = name.split("(")[0].strip()
+    name = name.replace(" ", "-").replace("_", "-")
+    
+    # Mapeos de iconos específicos
+    icon_mapping = {
+        "pavucontrol": "multimedia-volume-control",
+        "blueman-manager": "blueman",
+        "freecad": "freecad",
+        "openscad": "openscad",
+        "wallpicker": "wallpaper",
+        "kitty": "kitty",
+        "foot": "foot",
+        "alacritty": "alacritty",
+    }
+    
+    return icon_mapping.get(name, name)
+
 def load_data():
     if not os.path.exists(CACHE_FILE):
         return {"daily": {}, "weekly": {}, "monthly": {}, "_day": "", "_week": "", "_month": ""}
     try:
         with open(CACHE_FILE, 'r') as f:
             data = json.load(f)
-            if "daily" not in data: # Migración forzada
+            if "daily" not in data:
                 return {"daily": {}, "weekly": {}, "monthly": {}, "_day": "", "_week": "", "_month": ""}
-            
-            # Limpieza y normalización de datos existentes
-            modified = False
-            for period in ["daily", "weekly", "monthly"]:
-                new_period_data = {}
-                for app_name, stats in data[period].items():
-                    if app_name.startswith("_"):
-                        new_period_data[app_name] = stats
-                        continue
-                    
-                    norm_name = normalize_name(app_name)
-                    if norm_name not in new_period_data:
-                        new_period_data[norm_name] = stats
-                    else:
-                        # Fusionar estadísticas
-                        new_period_data[norm_name]["time"] += stats.get("time", 0)
-                        new_period_data[norm_name]["opens"] += stats.get("opens", 0)
-                    
-                    if norm_name != app_name:
-                        modified = True
-                data[period] = new_period_data
-            
-            if modified:
-                save_data(data)
-                
             return data
-    except Exception as e:
-        print(f"Error loading data: {e}", file=sys.stderr)
+    except:
         return {"daily": {}, "weekly": {}, "monthly": {}, "_day": "", "_week": "", "_month": ""}
 
 def save_data(data):
     try:
         os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
-        with open(CACHE_FILE, 'w') as f:
+        temp_file = CACHE_FILE + ".tmp"
+        with open(temp_file, 'w') as f:
             json.dump(data, f)
+        os.rename(temp_file, CACHE_FILE)
     except Exception as e:
         print(f"Error saving data: {e}", file=sys.stderr)
 
-def check_resets(store, current_app_name):
-    keys = get_keys()
-    changed = False
-    
-    if store.get("_day") != keys["day"]:
-        store["daily"] = {}
-        store["_day"] = keys["day"]
-        changed = True
-        
-    if store.get("_week") != keys["week"]:
-        store["weekly"] = {}
-        store["_week"] = keys["week"]
-        changed = True
-        
-    if store.get("_month") != keys["month"]:
-        store["monthly"] = {}
-        store["_month"] = keys["month"]
-        changed = True
-    
-    if changed and current_app_name:
-        for p in ["daily", "weekly", "monthly"]:
-            if current_app_name not in store[p]:
-                store[p][current_app_name] = {"time": 0, "opens": 0}
-        
-    return store, changed
-
-# --- Main ---
-sock_path = find_hyprland_socket()
-if not sock_path:
-    print("Hyprland socket not found", file=sys.stderr)
-    sys.exit(1)
-
-store = load_data()
-current_app = None
-store, _ = check_resets(store, current_app)
-save_data(store)
-
-last_time = time.time()
-last_save = time.time()
-
-import subprocess
-
-def normalize_name(name):
-    if not name: return ""
-    
-    # Mapeos específicos de clase/nombre a icono
-    mapping = {
-        "google-chrome": "google-chrome",
-        "chrome": "google-chrome",
-        "brave-browser": "brave-browser",
-        "firefox": "firefox",
-        "spotify": "spotify",
-        "obsidian": "obsidian",
-        "code-oss": "vscodium",
-        "vscodium": "vscodium",
-        "code": "visual-studio-code",
-        "thunar": "thunar",
-        "dolphin": "dolphin",
-        "kitty": "kitty",
-        "foot": "foot",
-        "alacritty": "alacritty",
-        "discord": "discord",
-        "vesktop": "vesktop",
-        "steam": "steam",
-        "pavucontrol": "multimedia-volume-control",
-        "blueman-manager": "blueman",
-        "org.freecad.freecad": "freecad",
-        "org.openscad.openscad": "openscad",
-        "com.reaan.wallpicker": "wallpaper",
-        "windsurf": "windsurf",
-        "cursor-url-handler": "cursor",
-        "sober": "sober",
-    }
-    
-    # 1. Lowercase
-    name = name.lower()
-    
-    # 2. Quitar extensiones comunes
-    if name.endswith(".exe"): name = name[:-4]
-    
-    # 3. Quitar prefijos reverse-dns (org.kde.dolphin -> dolphin)
-    prefixes = ["org.kde.", "org.gnome.", "com.", "io.", "net.", "org.freecad.", "org.openscad.", "org.vinegarhq."]
-    for pref in prefixes:
-        if name.startswith(pref):
-            name = name[len(pref):]
-            break
-            
-    # 4. Limpieza de caracteres raros (ej: war thunder (vulkan -> war thunder)
-    if "(" in name: name = name.split("(")[0].strip()
-    
-    # 5. Espacios a guiones (mejor para iconos de sistema)
-    name = name.replace(" ", "-")
-    
-    # 6. Aplicar mapeo
-    return mapping.get(name, name)
+def get_active_window_info():
+    try:
+        out = subprocess.check_output(["hyprctl", "activewindow", "-j"], stderr=subprocess.DEVNULL).decode('utf-8')
+        data = json.loads(out)
+        return data.get("class", ""), data.get("title", "")
+    except:
+        return "", ""
 
 def get_audio_apps():
     try:
@@ -182,118 +130,130 @@ def get_audio_apps():
                 raw_name = line.split(':')[0].lower().split('.')[0]
                 name = normalize_name(raw_name)
                 if name: apps.append(name)
-        return apps
+        return list(set(apps))
     except: return []
 
 def get_package_counts():
     try:
-        # Pacman (native)
         pacman_out = subprocess.check_output(["pacman", "-Qn"], stderr=subprocess.DEVNULL).decode("utf-8")
         pacman_count = len(pacman_out.strip().split("\n")) if pacman_out.strip() else 0
-        
-        # Yay/AUR (foreign)
         yay_out = subprocess.check_output(["pacman", "-Qm"], stderr=subprocess.DEVNULL).decode("utf-8")
         yay_count = len(yay_out.strip().split("\n")) if yay_out.strip() else 0
-        
         return pacman_count, yay_count
-    except Exception as e:
-        print(f"Error getting package counts: {e}", file=sys.stderr)
+    except:
         return 0, 0
 
-last_pkg_check = 0
+class AppTracker:
+    def __init__(self):
+        self.store = load_data()
+        cls, title = get_active_window_info()
+        self.current_app = normalize_name(cls, title)
+        self.lock = threading.Lock()
+        self.last_tick = time.time()
+        self.last_pkg_check = 0
+        self.running = True
+        
+        keys = get_keys()
+        for k in ["_day", "_week", "_month"]:
+            if k not in self.store: self.store[k] = keys[k[1:]]
 
-def update_time():
-    global last_time, current_app, last_pkg_check
-    now = time.time()
-    delta = now - last_time
-    
-    if delta > 14400: delta = 0
-    
-    # Actualizar conteo de paquetes cada 5 minutos
-    if now - last_pkg_check > 300:
-        p_count, y_count = get_package_counts()
-        store["_pacman_count"] = p_count
-        store["_yay_count"] = y_count
-        last_pkg_check = now
-    
-    if delta > 0:
+    def check_resets(self):
+        keys = get_keys()
+        changed = False
+        with self.lock:
+            if self.store.get("_day") != keys["day"]:
+                self.store["daily"] = {}
+                self.store["_day"] = keys["day"]
+                changed = True
+            if self.store.get("_week") != keys["week"]:
+                self.store["weekly"] = {}
+                self.store["_week"] = keys["week"]
+                changed = True
+            if self.store.get("_month") != keys["month"]:
+                self.store["monthly"] = {}
+                self.store["_month"] = keys["month"]
+                changed = True
+        return changed
+
+    def update_stats(self):
+        now = time.time()
+        delta = now - self.last_tick
+        self.last_tick = now
+        
+        if delta > 60 or delta < 0: return
+
         active_apps = set()
-        if current_app: 
-            norm_app = normalize_name(current_app)
-            if norm_app: active_apps.add(norm_app)
-        
-        audio_apps = get_audio_apps()
-        for app in audio_apps: active_apps.add(app)
-        
-        # Guardar lista de apps activas para la UI
-        store["_active"] = list(active_apps)
-
-        for p in ["daily", "weekly", "monthly"]:
-            if "_total_" not in store[p]: store[p]["_total_"] = {"time": 0, "opens": 0}
-            store[p]["_total_"]["time"] += delta
+        if self.current_app: active_apps.add(self.current_app)
+        for app in get_audio_apps(): active_apps.add(app)
             
-            for app in active_apps:
-                if app not in store[p]: store[p][app] = {"time": 0, "opens": 0}
-                store[p][app]["time"] += delta
-                
-    last_time = now
+        with self.lock:
+            self.store["_active"] = list(active_apps)
+            if now - self.last_pkg_check > 600:
+                p, y = get_package_counts()
+                self.store["_pacman_count"] = p
+                self.store["_yay_count"] = y
+                self.last_pkg_check = now
 
-try:
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.connect(sock_path)
-except Exception as e:
-    print(f"Failed to connect to socket: {e}", file=sys.stderr)
-    sys.exit(1)
+            for p in ["daily", "weekly", "monthly"]:
+                if "_total_" not in self.store[p]: self.store[p]["_total_"] = {"time": 0, "opens": 0}
+                self.store[p]["_total_"]["time"] += delta
+                for app in active_apps:
+                    if app not in self.store[p]: self.store[p][app] = {"time": 0, "opens": 0}
+                    self.store[p][app]["time"] += delta
 
-print("Connected to Hyprland socket")
-
-while True:
-    try:
-        raw = s.recv(4096).decode('utf-8', errors='ignore')
-        if not raw: break
-
-        for line in raw.strip().split('\n'):
-            line = line.strip()
-            if not line: continue
-
-            store, changed = check_resets(store, current_app)
-            
-            if line.startswith('activewindow>>'):
-                update_time()
-                payload = line.split('>>', 1)[1]
-                parts = payload.split(',', 1)
-                current_app = parts[0].strip() if parts else ""
-                if (time.time() - last_save) >= 2.0 or changed:
-                    save_data(store)
-                    last_save = time.time()
-
-            elif line.startswith('openwindow>>'):
-                payload = line.split('>>', 1)[1]
-                parts = payload.split(',')
-                if len(parts) >= 3:
-                    app_class = parts[2].strip()
-                    if app_class:
-                        app_name = normalize_name(app_class)
-                        for p in ["daily", "weekly", "monthly"]:
-                            if app_name not in store[p]: store[p][app_name] = {"time": 0, "opens": 0}
-                            store[p][app_name]["opens"] += 1
-                save_data(store)
+    def heartbeat_loop(self):
+        last_save = time.time()
+        while self.running:
+            self.check_resets()
+            self.update_stats()
+            if time.time() - last_save > 5:
+                with self.lock: save_data(self.store)
                 last_save = time.time()
+            time.sleep(1)
 
-            elif line.startswith('closewindow>>'):
-                update_time()
-                if (time.time() - last_save) >= 2.0 or changed:
-                    save_data(store)
-                    last_save = time.time()
+    def handle_event(self, line):
+        if line.startswith('activewindow>>'):
+            payload = line.split('>>', 1)[1]
+            parts = payload.split(',', 1)
+            cls = parts[0].strip() if len(parts) > 0 else ""
+            title = parts[1].strip() if len(parts) > 1 else ""
+            new_app = normalize_name(cls, title)
+            with self.lock: self.current_app = new_app
 
-        if time.time() - last_save >= 10.0:
-            update_time()
-            save_data(store)
-            last_save = time.time()
+        elif line.startswith('openwindow>>'):
+            payload = line.split('>>', 1)[1]
+            parts = payload.split(',')
+            if len(parts) >= 3:
+                app_class = parts[2].strip()
+                app_name = normalize_name(app_class)
+                if app_name:
+                    with self.lock:
+                        for p in ["daily", "weekly", "monthly"]:
+                            if app_name not in self.store[p]: self.store[p][app_name] = {"time": 0, "opens": 0}
+                            self.store[p][app_name]["opens"] += 1
 
+def main():
+    sock_path = find_hyprland_socket()
+    if not sock_path:
+        print("Hyprland socket not found", file=sys.stderr)
+        sys.exit(1)
+
+    tracker = AppTracker()
+    threading.Thread(target=tracker.heartbeat_loop, daemon=True).start()
+
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.connect(sock_path)
+        while True:
+            raw = s.recv(4096).decode('utf-8', errors='ignore')
+            if not raw: break
+            for line in raw.strip().split('\n'):
+                tracker.handle_event(line.strip())
     except Exception as e:
-        print(f"Error in loop: {e}", file=sys.stderr)
-        break
+        print(f"Error: {e}", file=sys.stderr)
+    finally:
+        tracker.running = False
+        save_data(tracker.store)
 
-update_time()
-save_data(store)
+if __name__ == "__main__":
+    main()
