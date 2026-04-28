@@ -1,11 +1,19 @@
-// Quickshell Entry Point.
-// Variants creates a PanelWindow instance for each connected monitor.
-// Quickshell automatically manages the lifecycle when monitors are connected or disconnected.
+import Quickshell
+import Quickshell.Wayland
+import Quickshell.Io
+import QtQuick
+
+// Punto de entrada de Quickshell.
+// Variants crea una instancia de PanelWindow por cada monitor conectado.
+// Cuando se conecta/desconecta un monitor, Quickshell gestiona el ciclo
+// de vida automáticamente.
 
 ShellRoot {
-    // ── Global State Management for AudioManager & Super F2 ──
+    // ── Global state for AudioManager & Super F2 ──
     property bool audioManagerVisible: false
     property bool superF2Visible: false
+    property bool amAnimating: false
+    property bool f2Animating: false
     property string _lastAmState: ""
     property string _lastF2State: ""
 
@@ -22,28 +30,44 @@ ShellRoot {
 
                 if (amRaw !== _lastAmState) {
                     _lastAmState = amRaw
-                    audioManagerVisible = (amRaw === "visible")
+                    var newVal = (amRaw === "visible")
+                    if (!newVal && audioManagerVisible) {
+                        amAnimating = true
+                        amHideTimer.start()
+                    } else if (newVal) {
+                        amAnimating = false
+                        amHideTimer.stop()
+                    }
+                    audioManagerVisible = newVal
                 }
                 if (f2Raw !== _lastF2State) {
                     _lastF2State = f2Raw
-                    superF2Visible = (f2Raw === "visible")
+                    var newValF2 = (f2Raw === "visible")
+                    if (!newValF2 && superF2Visible) {
+                        f2Animating = true
+                        f2HideTimer.start()
+                    } else if (newValF2) {
+                        f2Animating = false
+                        f2HideTimer.stop()
+                    }
+                    superF2Visible = newValF2
                 }
             }
         }
     }
     Timer { interval: 250; running: true; repeat: true; triggeredOnStart: true; onTriggered: amStateProc.running = true }
 
-    property var mprisData: ({})
-    property var clockData: ({})
+    Timer { id: amHideTimer; interval: 400; onTriggered: amAnimating = false }
+    Timer { id: f2HideTimer; interval: 400; onTriggered: f2Animating = false }
 
-    // ── Background Services: Start MPRIS follow daemon (singleton) ──
+    // ── Global: start MPRIS follow daemon (once, not per-monitor) ──
     Process {
         id: mprisStart
         command: ["sh", "-c", "~/.config/scripts/mpris-follow.sh &"]
     }
     Component.onCompleted: mprisStart.running = true
 
-    // ── Top Bar: Primary Status Interface (per-monitor) ──
+    // ── Top bar (one per monitor) ──
     Variants {
         model: Quickshell.screens
 
@@ -71,21 +95,11 @@ ShellRoot {
 
             StatusBar {
                 anchors.fill: parent
-                onMprisCenterXChanged: {
-                    var d = mprisData
-                    d[modelData.name] = { center: mprisCenterX, width: mprisWidth }
-                    mprisData = d
-                }
-                onClockCenterXChanged: {
-                    var d = clockData
-                    d[modelData.name] = { center: clockCenterX, width: clockWidth }
-                    clockData = d
-                }
             }
         }
     }
 
-    // ── OSD Overlay: Volume/Brightness feedback (right edge, per-monitor) ──
+    // ── OSD overlay (volume/brightness, right edge, one per monitor) ──
     Variants {
         model: Quickshell.screens
 
@@ -104,8 +118,8 @@ ShellRoot {
                 right: 12
             }
 
-            width: 60
-            height: 300
+            implicitWidth: 60
+            implicitHeight: 300
 
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
@@ -117,7 +131,7 @@ ShellRoot {
         }
     }
 
-    // ── AudioManager Popup: Media control interface (anchored to top-left) ──
+    // ── AudioManager popup (top-left, aligned with music/mpris module) ──
     Variants {
         model: Quickshell.screens
 
@@ -127,35 +141,32 @@ ShellRoot {
             property var modelData
             screen: modelData
 
-            visible: audioManagerVisible || amContent.animating
+            // Solo visible cuando está activo o animando para no bloquear clics
+            visible: audioManagerVisible || amAnimating
 
-            anchors {
-                top: true
-                left: true
-            }
+            anchors.top: true
+            anchors.left: true
+            anchors.right: false
 
             margins {
-                top: 50
-                left: 16
+                top: 48 
+                left: 280 // Alineación manual aproximada con el módulo MPRIS
             }
 
-            width: 500
-            height: 650
+            implicitWidth: 500
+            implicitHeight: 662
 
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
 
             AudioManager {
-                id: amContent
                 anchors.fill: parent
-                opened: audioManagerVisible
-                originX: (mprisData[modelData.name] ? mprisData[modelData.name].center : 250) - 16
-                pillWidth: mprisData[modelData.name] ? mprisData[modelData.name].width : 150
+                active: audioManagerVisible
             }
         }
     }
 
-    // ── Super F2 Panel: System Dashboard & Weather (centered overlay) ──
+    // ── Super F2 Panel popup (center-top, aligned with clock) ──
     Variants {
         model: Quickshell.screens
 
@@ -165,25 +176,26 @@ ShellRoot {
             property var modelData
             screen: modelData
 
-            visible: superF2Visible || f2Content.animating
+            visible: superF2Visible || f2Animating
 
             anchors.top: true
-            // Removing left/right anchors allows centering based on width
+            anchors.left: true
+            anchors.right: false
             
-            margins.top: 50
+            margins {
+                top: 48
+                left: screen ? (screen.width - 1200) / 2 : 0
+            }
 
-            width: 1200
-            height: 750
+            implicitWidth: 1200
+            implicitHeight: 762
 
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
 
             SuperF2Panel {
-                id: f2Content
                 anchors.fill: parent
-                opened: superF2Visible
-                originX: (clockData[modelData.name] ? clockData[modelData.name].center : (bar.width / 2)) - (bar.width - 1200)/2 - 16
-                pillWidth: clockData[modelData.name] ? clockData[modelData.name].width : 200
+                active: superF2Visible
             }
         }
     }

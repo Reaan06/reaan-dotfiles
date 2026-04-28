@@ -10,7 +10,7 @@ Rectangle {
     property color pillColor: Qt.rgba(0.157, 0.173, 0.204, 0.9)
     property color hoverColor: Qt.rgba(0.192, 0.196, 0.267, 0.95)
     property bool hoverEnabled: true
-    property real pillRadius: 10
+    property real pillRadius: 12
     property real hPad: 14
     property real vPad: 8
 

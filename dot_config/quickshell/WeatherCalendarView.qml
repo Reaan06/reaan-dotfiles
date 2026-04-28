@@ -67,9 +67,9 @@ Item {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 25
 
             Rectangle {
-                id: heroWidget; Layout.fillWidth: true; Layout.preferredHeight: 130; radius: 24; color: root.cBg; border.color: Qt.rgba(1, 1, 1, 0.05); clip: true
+                id: heroWidget; Layout.fillWidth: true; Layout.preferredHeight: 130; radius: 40; color: root.cBg; border.color: Qt.rgba(1, 1, 1, 0.05); clip: true
                 RowLayout {
-                    anchors.fill: parent; anchors.leftMargin: 25; anchors.rightMargin: 45; spacing: 30
+                    anchors.fill: parent; anchors.leftMargin: 45; anchors.rightMargin: 45; spacing: 30
                     ColumnLayout {
                         spacing: 8; Layout.fillWidth: true
                         Text { text: weatherManager.loading ? "Localizando..." : (weatherManager.weatherData.city || "Clima"); font.family: "JetBrains Mono Nerd Font"; font.pixelSize: 34; font.bold: true; color: root.cText; elide: Text.ElideRight }
@@ -87,7 +87,7 @@ Item {
                             font.family: "JetBrains Mono Nerd Font"; font.pixelSize: 56; font.bold: true; color: root.cMauve 
                         }
                         Rectangle {
-                            width: 80; height: 80; radius: 18; color: Qt.rgba(root.cMauve.r, root.cMauve.g, root.cMauve.b, 0.1)
+                            width: 80; height: 80; radius: 24; color: Qt.rgba(root.cMauve.r, root.cMauve.g, root.cMauve.b, 0.1)
                             Text { anchors.centerIn: parent; text: "󰖐"; font.pixelSize: 42; color: root.cBlue }
                         }
                     }
