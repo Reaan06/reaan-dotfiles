@@ -9,6 +9,7 @@ Item {
     id: root
 
     property bool active: false
+    property real neckOffset: 0
     readonly property string font: "JetBrains Mono Nerd Font"
     
     // ═══════════════════════════════════════════════
@@ -123,6 +124,7 @@ Item {
             Layout.leftMargin: 34 // Alineación manual estable
             color: root.cPill
             barWidth: 200 // Ancho base del módulo MPRIS
+            neckOffset: root.neckOffset
         }
 
         Rectangle {

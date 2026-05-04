@@ -10,6 +10,7 @@ Item {
     id: root
 
     property bool active: false
+    property real neckOffset: 0
     readonly property string font: "JetBrains Mono Nerd Font"
     
     // ═══════════════════════════════════════════════
@@ -83,6 +84,7 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             color: root.cBg
             barWidth: 350 // Ancho manual estable
+            neckOffset: root.neckOffset
         }
 
         Rectangle {
