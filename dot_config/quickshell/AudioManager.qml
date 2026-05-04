@@ -10,6 +10,7 @@ Item {
 
     property bool active: false
     property real neckOffset: 0
+    property real anchorWidth: 200
     readonly property string font: "JetBrains Mono Nerd Font"
     
     // ═══════════════════════════════════════════════
@@ -120,10 +121,9 @@ Item {
 
         // Conector curvo alineado con el módulo MPRIS (izquierda de la barra)
         PanelConnector {
-            Layout.alignment: Qt.AlignLeft
-            Layout.leftMargin: 34 // Alineación manual estable
+            Layout.fillWidth: true
             color: root.cPill
-            barWidth: 200 // Ancho base del módulo MPRIS
+            barWidth: root.anchorWidth
             neckOffset: root.neckOffset
         }
 

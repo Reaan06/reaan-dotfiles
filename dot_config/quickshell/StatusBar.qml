@@ -45,22 +45,40 @@ Item {
     property string sKbLang:  "EN"
 
     // Global coordinate helpers for panel alignment
-    readonly property real mprisCenterWorldX: getCenterWorldX(mprisAnchor)
-    readonly property real clockCenterWorldX: getCenterWorldX(clockAnchor)
+    readonly property real mprisCenterWorldX: mprisAnchor ? getCenterWorldX(mprisAnchor) : 0
+    readonly property real clockCenterWorldX: clockAnchor ? getCenterWorldX(clockAnchor) : 0
 
-    // Notify shellRoot about our coordinates
+    // Update anchors when relevant properties change
     onMprisCenterWorldXChanged: updateAnchors()
     onClockCenterWorldXChanged: updateAnchors()
+    
+    // Also update when visibility changes
+    Connections {
+        target: mprisAnchor
+        function onVisibleChanged() { updateAnchors() }
+        function onWidthChanged() { updateAnchors() }
+    }
+    Connections {
+        target: clockAnchor
+        function onVisibleChanged() { updateAnchors() }
+        function onWidthChanged() { updateAnchors() }
+    }
+
+    // Periodic safety sync for anchors
+    Timer { interval: 1000; running: true; repeat: true; onTriggered: updateAnchors() }
 
     function updateAnchors() {
         if (!parent || !parent.screen) return
         var idx = parent.screen.index
         var data = shellRoot.anchors
-        data[idx] = { mpris: mprisCenterWorldX, clock: clockCenterWorldX }
+        data[idx] = { 
+            mpris: mprisCenterWorldX, 
+            mprisWidth: mprisAnchor ? mprisAnchor.width : 0,
+            clock: clockCenterWorldX,
+            clockWidth: clockAnchor ? clockAnchor.width : 0
+        }
         shellRoot.anchors = data // Trigger update
     }
-
-    Component.onCompleted: updateAnchors()
 
     function getCenterWorldX(item) {
         if (!item) return 0
@@ -105,7 +123,10 @@ Item {
         command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
         stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
     }
-    Component.onCompleted: { paletteProc.running = true }
+    Component.onCompleted: {
+        paletteProc.running = true
+        updateAnchors()
+    }
     Timer { interval: 3000; running: true; repeat: true; onTriggered: paletteProc.running = true }
 
     // Layout de teclado actual

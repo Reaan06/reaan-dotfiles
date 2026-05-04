@@ -9,7 +9,7 @@ ShellRoot {
     id: shellRoot
 
     // ── Global Anchor Registry ──
-    // Almacena las coordenadas de los módulos por monitor para alinear los paneles.
+    // Almacena las coordenadas locales de los módulos (respecto a la barra) por monitor.
     property var anchors: ({})
 
     // ── Global state for AudioManager & Super F2 ──
@@ -112,12 +112,16 @@ ShellRoot {
             visible: audioManagerVisible || amAnimating
             anchors.top: true; anchors.left: true
             
-            // Calculamos la posición basándonos en el registro global de anclas para este monitor
-            property real anchorX: shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].mpris : 0
+            // Coordenada X global del ancla (16px de margen de la barra + posición local del módulo)
+            property real worldAnchorX: 16 + (shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].mpris : 0)
+            property real anchorWidth: shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].mprisWidth : 200
             
+            onWorldAnchorXChanged: console.log("AUDIO: worldAnchorX=" + worldAnchorX + " width=" + width + " screenWidth=" + modelData.width)
+
             margins {
                 top: 48 
-                left: anchorX - (audioManagerWin.width / 2)
+                // Centramos el panel pero aseguramos que no se salga de la pantalla (min 16px de margen)
+                left: Math.max(16, Math.min(screen.width - width - 16, worldAnchorX - (width / 2)))
             }
 
             Behavior on margins.left { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
@@ -128,8 +132,9 @@ ShellRoot {
             AudioManager {
                 anchors.fill: parent
                 active: audioManagerVisible
-                // Si queremos pasar un offset al conector, lo calculamos aquí
-                neckOffset: 0 
+                anchorWidth: audioManagerWin.anchorWidth
+                // El cuello del conector persigue al ancla si el panel está desplazado por el clamping
+                neckOffset: worldAnchorX - (audioManagerWin.x + audioManagerWin.width / 2)
             }
         }
     }
@@ -144,12 +149,14 @@ ShellRoot {
             visible: superF2Visible || f2Animating
             anchors.top: true; anchors.left: true
             
-            // Calculamos el ancla del reloj para este monitor
-            property real clockX: shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].clock : 0
+            // Coordenada X global del reloj
+            property real worldClockX: 16 + (shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].clock : 0)
+            property real clockWidth: shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].clockWidth : 350
 
             margins {
                 top: 48
-                left: (modelData.width - 1200) / 2
+                // Panel siempre centrado perfectamente en el monitor
+                left: (screen.width - 1200) / 2
             }
 
             implicitWidth: 1200; implicitHeight: 762
@@ -158,8 +165,9 @@ ShellRoot {
             SuperF2Panel {
                 anchors.fill: parent
                 active: superF2Visible
-                // El panel se mantiene centrado, el conector persigue al reloj
-                neckOffset: clockX - (superF2Win.x + superF2Win.width / 2)
+                anchorWidth: superF2Win.clockWidth
+                // El conector se desplaza dinámicamente para unirse al reloj
+                neckOffset: worldClockX - (superF2Win.x + superF2Win.width / 2)
             }
         }
     }

@@ -11,6 +11,7 @@ Item {
 
     property bool active: false
     property real neckOffset: 0
+    property real anchorWidth: 350
     readonly property string font: "JetBrains Mono Nerd Font"
     
     // ═══════════════════════════════════════════════
@@ -81,9 +82,9 @@ Item {
 
         // Conector curvo centrado (alineado con Reloj/Clima)
         PanelConnector {
-            Layout.alignment: Qt.AlignHCenter
+            Layout.fillWidth: true
             color: root.cBg
-            barWidth: 350 // Ancho manual estable
+            barWidth: root.anchorWidth
             neckOffset: root.neckOffset
         }
 

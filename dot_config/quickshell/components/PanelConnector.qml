@@ -8,8 +8,8 @@ Canvas {
     id: root
 
     property color color: "#1e1e2e"
-    property real connectorHeight: 12
-    property real cornerRadius: 12
+    property real connectorHeight: 20
+    property real cornerRadius: 16
     property real barWidth: 100
     property real neckOffset: 0
 
@@ -19,6 +19,8 @@ Canvas {
     onColorChanged: requestPaint()
     onBarWidthChanged: requestPaint()
     onNeckOffsetChanged: requestPaint()
+    onWidthChanged: requestPaint()
+    onHeightChanged: requestPaint()
 
     onPaint: {
         var ctx = getContext("2d");
@@ -29,26 +31,30 @@ Canvas {
         var topCenter = centerX + neckOffset;
         var halfBar = barWidth / 2;
         
+        // Ensure we don't draw outside if the neck is very offset
         ctx.beginPath();
-        // Top line (at the bar)
-        ctx.moveTo(topCenter - halfBar, -1);
-        ctx.lineTo(topCenter + halfBar, -1);
         
-        // Right curve
+        // 1. Move to top-left of the bar attachment
+        ctx.moveTo(topCenter - halfBar, 0);
+        
+        // 2. Line to top-right of the bar attachment
+        ctx.lineTo(topCenter + halfBar, 0);
+        
+        // 3. Curve down to the right side of the panel
         ctx.bezierCurveTo(
-            topCenter + halfBar, connectorHeight * 0.4,
-            centerX + (width/2 - cornerRadius), connectorHeight * 0.6,
-            width + 1, connectorHeight + 1
+            topCenter + halfBar + cornerRadius * 2, height * 0.1, // Drastic pull
+            width - cornerRadius, height * 0.4,                  // Pull from panel side
+            width, height                                        // End
         );
         
-        // Bottom line (at the panel)
-        ctx.lineTo(-1, connectorHeight + 1);
+        // 4. Bottom line connecting to the panel body
+        ctx.lineTo(0, height);
         
-        // Left curve
+        // 5. Curve back up to the left side of the bar attachment
         ctx.bezierCurveTo(
-            centerX - (width/2 - cornerRadius), connectorHeight * 0.6,
-            topCenter - halfBar, connectorHeight * 0.4,
-            topCenter - halfBar, -1
+            cornerRadius, height * 0.4,                          // Pull from panel side
+            topCenter - halfBar - cornerRadius * 2, height * 0.1, // Drastic pull
+            topCenter - halfBar, 0                               // End
         );
         
         ctx.closePath();
