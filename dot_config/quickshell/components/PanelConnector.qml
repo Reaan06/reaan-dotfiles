@@ -2,6 +2,7 @@ import QtQuick
 
 /**
  * PanelConnector: Crea una transición visual curva entre la barra superior y un panel.
+ * Soporta neckOffset para alinear el cuello superior de forma asimétrica.
  */
 Canvas {
     id: root
@@ -10,39 +11,44 @@ Canvas {
     property real connectorHeight: 12
     property real cornerRadius: 12
     property real barWidth: 100
+    property real neckOffset: 0
 
     implicitWidth: barWidth + (cornerRadius * 2)
     implicitHeight: connectorHeight
 
     onColorChanged: requestPaint()
     onBarWidthChanged: requestPaint()
+    onNeckOffsetChanged: requestPaint()
 
     onPaint: {
         var ctx = getContext("2d");
         ctx.reset();
-        
         ctx.fillStyle = root.color;
         
-        // Dibujamos un pequeño solapamiento superior para asegurar una unión limpia
-        ctx.beginPath();
-        ctx.moveTo(cornerRadius, -1);
-        ctx.lineTo(barWidth + cornerRadius, -1);
+        var centerX = width / 2;
+        var topCenter = centerX + neckOffset;
+        var halfBar = barWidth / 2;
         
-        // Bajada hacia la derecha con curva cóncava suave
+        ctx.beginPath();
+        // Top line (at the bar)
+        ctx.moveTo(topCenter - halfBar, -1);
+        ctx.lineTo(topCenter + halfBar, -1);
+        
+        // Right curve
         ctx.bezierCurveTo(
-            barWidth + cornerRadius, connectorHeight * 0.4,
-            barWidth + cornerRadius * 2, connectorHeight * 0.6,
-            barWidth + cornerRadius * 2, connectorHeight + 1
+            topCenter + halfBar, connectorHeight * 0.4,
+            centerX + (width/2 - cornerRadius), connectorHeight * 0.6,
+            width + 1, connectorHeight + 1
         );
         
-        // Base que conecta con el panel (solapamiento inferior)
+        // Bottom line (at the panel)
         ctx.lineTo(-1, connectorHeight + 1);
         
-        // Subida hacia la izquierda con curva cóncava suave
+        // Left curve
         ctx.bezierCurveTo(
-            0, connectorHeight * 0.6,
-            cornerRadius, connectorHeight * 0.4,
-            cornerRadius, -1
+            centerX - (width/2 - cornerRadius), connectorHeight * 0.6,
+            topCenter - halfBar, connectorHeight * 0.4,
+            topCenter - halfBar, -1
         );
         
         ctx.closePath();
