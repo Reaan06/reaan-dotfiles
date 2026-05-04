@@ -44,6 +44,17 @@ Item {
 
     property string sKbLang:  "EN"
 
+    // Global coordinate helpers for panel alignment
+    readonly property real mprisCenterWorldX: getCenterWorldX(mprisAnchor) + (parent.x || 0)
+    readonly property real clockCenterWorldX: getCenterWorldX(clockAnchor) + (parent.x || 0)
+
+    function getCenterWorldX(item) {
+        if (!item) return 0
+        // Map center of the item to global window coordinates
+        var p = item.mapToItem(null, item.width / 2, 0)
+        return p.x
+    }
+
     // MPRIS state via playerctl
     property string mpTitle: ""
     property string mpArtist: ""
@@ -338,6 +349,7 @@ Item {
 
         // ──────── 3. MPRIS — art | info(2 líneas) | controles ────────
         Pill {
+            id: mprisAnchor
             visible: root.mpActive
             pillColor: root.cPill; hoverColor: root.cHover; hPad: 18
 
@@ -461,6 +473,7 @@ Item {
 
         // ──────── 4. RELOJ + FECHA + CLIMA (una sola caja) ────────
         Pill {
+            id: clockAnchor
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             pillColor: root.cPill; hPad: 16
 
