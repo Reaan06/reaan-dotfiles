@@ -45,8 +45,22 @@ Item {
     property string sKbLang:  "EN"
 
     // Global coordinate helpers for panel alignment
-    readonly property real mprisCenterWorldX: getCenterWorldX(mprisAnchor) + (parent.x || 0)
-    readonly property real clockCenterWorldX: getCenterWorldX(clockAnchor) + (parent.x || 0)
+    readonly property real mprisCenterWorldX: getCenterWorldX(mprisAnchor)
+    readonly property real clockCenterWorldX: getCenterWorldX(clockAnchor)
+
+    // Notify shellRoot about our coordinates
+    onMprisCenterWorldXChanged: updateAnchors()
+    onClockCenterWorldXChanged: updateAnchors()
+
+    function updateAnchors() {
+        if (!parent || !parent.screen) return
+        var idx = parent.screen.index
+        var data = shellRoot.anchors
+        data[idx] = { mpris: mprisCenterWorldX, clock: clockCenterWorldX }
+        shellRoot.anchors = data // Trigger update
+    }
+
+    Component.onCompleted: updateAnchors()
 
     function getCenterWorldX(item) {
         if (!item) return 0

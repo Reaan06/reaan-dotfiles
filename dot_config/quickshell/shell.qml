@@ -4,10 +4,14 @@ import Quickshell.Io
 import QtQuick
 
 // Punto de entrada de Quickshell.
-// Usamos un solo bloque Variants para agrupar todas las ventanas por monitor,
-// lo que permite referenciar coordenadas entre ellas fácilmente.
 
 ShellRoot {
+    id: shellRoot
+
+    // ── Global Anchor Registry ──
+    // Almacena las coordenadas de los módulos por monitor para alinear los paneles.
+    property var anchors: ({})
+
     // ── Global state for AudioManager & Super F2 ──
     property bool audioManagerVisible: false
     property bool superF2Visible: false
@@ -66,104 +70,96 @@ ShellRoot {
     }
     Component.onCompleted: mprisStart.running = true
 
-    // ── Monitor-Specific Windows ──
+    // ── Top bar (one per monitor) ──
     Variants {
         model: Quickshell.screens
+        PanelWindow {
+            id: bar
+            property var modelData
+            screen: modelData
+            anchors { top: true; left: true; right: true }
+            margins { top: 6; left: 16; right: 16 }
+            exclusionMode: ExclusionMode.Auto
+            implicitHeight: 44
+            color: "transparent"
+            StatusBar { anchors.fill: parent }
+        }
+    }
 
-        // Empleamos un Item como contenedor para que todas las ventanas del mismo monitor
-        // compartan el mismo scope de IDs.
-        Item {
-            property var screenModel: modelData
+    // ── OSD overlay (volume/brightness, right edge, one per monitor) ──
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            id: osdWin
+            property var modelData
+            screen: modelData
+            visible: osdContent.osdVisible
+            anchors.right: true
+            margins { top: 250; right: 12 }
+            implicitWidth: 60; implicitHeight: 300
+            exclusionMode: ExclusionMode.Ignore; color: "transparent"
+            Osd { id: osdContent; anchors.fill: parent }
+        }
+    }
 
-            // 1. Top bar
-            PanelWindow {
-                id: bar
-                screen: screenModel
-                anchors { top: true; left: true; right: true }
-                margins { top: 6; left: 16; right: 16 }
-                exclusionMode: ExclusionMode.Auto
-                implicitHeight: 44
-                color: "transparent"
-
-                StatusBar {
-                    id: statusBar
-                    anchors.fill: parent
-                }
+    // ── AudioManager popup (top-left, aligned with music/mpris module) ──
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            id: audioManagerWin
+            property var modelData
+            screen: modelData
+            visible: audioManagerVisible || amAnimating
+            anchors.top: true; anchors.left: true
+            
+            // Calculamos la posición basándonos en el registro global de anclas para este monitor
+            property real anchorX: shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].mpris : 0
+            
+            margins {
+                top: 48 
+                left: anchorX - (audioManagerWin.width / 2)
             }
 
-            // 2. OSD overlay
-            PanelWindow {
-                id: osdWin
-                screen: screenModel
-                visible: osdContent.osdVisible
-                anchors.right: true
-                margins { top: 250; right: 12 }
-                implicitWidth: 60
-                implicitHeight: 300
-                exclusionMode: ExclusionMode.Ignore
-                color: "transparent"
+            Behavior on margins.left { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
 
-                Osd {
-                    id: osdContent
-                    anchors.fill: parent
-                }
+            implicitWidth: 500; implicitHeight: 662
+            exclusionMode: ExclusionMode.Ignore; color: "transparent"
+
+            AudioManager {
+                anchors.fill: parent
+                active: audioManagerVisible
+                // Si queremos pasar un offset al conector, lo calculamos aquí
+                neckOffset: 0 
+            }
+        }
+    }
+
+    // ── Super F2 Panel popup (center-top, aligned with clock) ──
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            id: superF2Win
+            property var modelData
+            screen: modelData
+            visible: superF2Visible || f2Animating
+            anchors.top: true; anchors.left: true
+            
+            // Calculamos el ancla del reloj para este monitor
+            property real clockX: shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].clock : 0
+
+            margins {
+                top: 48
+                left: (modelData.width - 1200) / 2
             }
 
-            // 3. AudioManager popup
-            PanelWindow {
-                id: audioManagerWin
-                screen: screenModel
-                visible: audioManagerVisible || amAnimating
-                anchors.top: true
-                anchors.left: true
-                
-                margins {
-                    top: 48 
-                    // Alineación dinámica con el módulo MPRIS en la barra de estado
-                    left: statusBar.mprisCenterWorldX - (audioManagerWin.width / 2)
-                }
+            implicitWidth: 1200; implicitHeight: 762
+            exclusionMode: ExclusionMode.Ignore; color: "transparent"
 
-                // Animación suave para cuando el módulo MPRIS se mueve o aparece
-                Behavior on margins.left { 
-                    NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
-                }
-
-                implicitWidth: 500
-                implicitHeight: 662
-                exclusionMode: ExclusionMode.Ignore
-                color: "transparent"
-
-                AudioManager {
-                    anchors.fill: parent
-                    active: audioManagerVisible
-                }
-            }
-
-            // 4. Super F2 Panel popup
-            PanelWindow {
-                id: superF2Win
-                screen: screenModel
-                visible: superF2Visible || f2Animating
-                anchors.top: true
-                anchors.left: true
-                
-                margins {
-                    top: 48
-                    // Centrado en la pantalla
-                    left: (screenModel.width - 1200) / 2
-                }
-
-                implicitWidth: 1200
-                implicitHeight: 762
-                exclusionMode: ExclusionMode.Ignore
-                color: "transparent"
-
-                SuperF2Panel {
-                    anchors.fill: parent
-                    active: superF2Visible
-                    // Pasamos el desfase entre el centro del panel y el reloj de la barra
-                    neckOffset: statusBar.clockCenterWorldX - (superF2Win.x + superF2Win.width / 2)
-                }
+            SuperF2Panel {
+                anchors.fill: parent
+                active: superF2Visible
+                // El panel se mantiene centrado, el conector persigue al reloj
+                neckOffset: clockX - (superF2Win.x + superF2Win.width / 2)
             }
         }
     }
