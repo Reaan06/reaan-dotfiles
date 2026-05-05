@@ -24,7 +24,6 @@ Item {
     property color cText:   "#cdd6f4"
     property color cSub:    "#6c7086"
 
-    // Animaciones agresivas para que el cambio se note
     Behavior on cPill  { ColorAnimation { duration: 600 } }
     Behavior on cMauve { ColorAnimation { duration: 600 } }
     Behavior on cBlue  { ColorAnimation { duration: 600 } }
@@ -40,9 +39,7 @@ Item {
         try {
             var pc = parts[0]
             if (pc && pc.startsWith("#") && pc.length >= 7) {
-                cPill  = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
-                                 parseInt(pc.substr(3,2),16)/255,
-                                 parseInt(pc.substr(5,2),16)/255, 0.92)
+                cPill  = Qt.rgba(parseInt(pc.substr(1,2),16)/255, parseInt(pc.substr(3,2),16)/255, parseInt(pc.substr(5,2),16)/255, 0.92)
             }
             cBlue  = parts[1] || cBlue
             cGreen = parts[2] || cGreen
@@ -51,7 +48,7 @@ Item {
             cText  = parts[6] || cText
             cSub   = parts[7] || cSub
         } catch (e) {
-            console.log("Error parsing palette in AudioManager: " + e)
+            console.log("Error parsing palette: " + e)
         }
     }
 
@@ -67,6 +64,11 @@ Item {
     property bool mpPlaying: false; property int mpPos: 0; property int mpLen: 0
     property string mpSource: "System"; property string btDevice: "Built-in Audio"
     property var eqBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; property string activePreset: "Flat"
+    
+    // App Volume state
+    property bool showAppVol: false
+    property var appsList: []
+    property bool draggingVol: false
 
     // ── DATA SYNC ──
     Process {
@@ -93,45 +95,56 @@ Item {
     }
     Timer { interval: 3000; running: true; repeat: true; onTriggered: btProc.running = true }
 
+    Process {
+        id: appVolProc; command: ["sh", "-c", "~/.config/scripts/app-volume.sh list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.appsList = JSON.parse(text.trim())
+                } catch(e) {
+                    root.appsList = []
+                }
+            }
+        }
+    }
+    Timer { 
+        interval: 1500; running: root.showAppVol && root.active; repeat: true; triggeredOnStart: true
+        onTriggered: {
+            if (!root.draggingVol) appVolProc.running = true
+        }
+    }
+
     function togglePlay() { mProc.command = ["playerctl", "play-pause"]; mProc.running = true }
     function nextTrack() { mProc.command = ["playerctl", "next"]; mProc.running = true }
     function prevTrack() { mProc.command = ["playerctl", "previous"]; mProc.running = true }
     function setPreset(p) { 
         root.activePreset = p; mProc.command = ["sh", "-c", "~/.config/scripts/eq-control.sh set-preset " + p]; mProc.running = true
         var nb = [0,0,0,0,0,0,0,0,0,0]
-        if (p === "Bass") nb = [12, 10, 6, 2, 0, -2, -4, -6, -8, -10]
-        else if (p === "Treble") nb = [-8, -6, -4, -2, 0, 2, 6, 9, 11, 12]
-        else if (p === "Rock") nb = [9, 7, 4, -1, -3, -1, 3, 6, 8, 9]
-        else if (p === "Pop") nb = [-3, -1, 2, 5, 8, 7, 4, 1, -1, -3]
-        else if (p === "Jazz") nb = [7, 5, 3, 5, -1, -1, 2, 4, 6, 7]
+        if (p === "Bass") nb = [10, 8, 6, 3, 1, 0, -1, -2, -3, -4]
+        else if (p === "Treble") nb = [-4, -3, -2, -1, 0, 2, 5, 8, 10, 12]
+        else if (p === "Rock") nb = [8, 6, 4, -1, -3, -1, 3, 5, 7, 8]
+        else if (p === "Pop") nb = [-2, -1, 2, 5, 7, 6, 3, 1, -1, -2]
+        else if (p === "Jazz") nb = [6, 4, 2, 4, -1, -1, 2, 4, 5, 6]
+        else if (p === "Vocal") nb = [-4, -2, 0, 2, 5, 6, 5, 2, 0, -2]
+        else if (p === "Classic") nb = [5, 4, 3, 2, 0, 0, -2, -3, -4, -5]
         root.eqBands = nb
     }
     Process { id: mProc }
 
     // ── UI ──
     ColumnLayout {
-        anchors.fill: parent
-        spacing: 0
-        opacity: root.active ? 1.0 : 0.0
-        scale: root.active ? 1.0 : 0.98
-        visible: opacity > 0
+        anchors.fill: parent; spacing: 0
+        opacity: root.active ? 1.0 : 0.0; scale: root.active ? 1.0 : 0.98; visible: opacity > 0
 
         Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
 
-        // Conector curvo alineado con el módulo MPRIS (izquierda de la barra)
         PanelConnector {
-            Layout.fillWidth: true
-            color: root.cPill
-            barWidth: root.anchorWidth
-            neckOffset: root.neckOffset
+            Layout.fillWidth: true; color: root.cPill; barWidth: root.anchorWidth; neckOffset: root.neckOffset
         }
 
         Rectangle {
-            id: mainContainer; 
-            Layout.fillWidth: true; 
-            Layout.fillHeight: true; 
-            radius: 36; color: root.cPill
+            id: mainContainer; Layout.fillWidth: true; Layout.fillHeight: true; radius: 36; color: root.cPill
             border.color: Qt.rgba(1,1,1,0.1); border.width: 1
 
             ColumnLayout {
@@ -185,44 +198,152 @@ Item {
                     Layout.fillWidth: true; Layout.alignment: Qt.AlignHCenter; spacing: 48
                     Text { text: "󰒮"; font.family: root.font; font.pixelSize: 32; color: root.cText; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.prevTrack() } }
                     Rectangle {
-                        width: 60; height: 60; radius: 20
-                        color: Qt.rgba(1,1,1,0.08)
+                        width: 60; height: 60; radius: 20; color: Qt.rgba(1,1,1,0.08)
                         Text { anchors.centerIn: parent; text: root.mpPlaying ? "󰏦" : "󰐍"; font.family: root.font; font.pixelSize: 34; color: root.cMauve }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.togglePlay() }
                     }
                     Text { text: "󰒭"; font.family: root.font; font.pixelSize: 32; color: root.cText; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.nextTrack() } }
                 }
                 Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.08) }
+                
+                // Toggle Header
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { text: "Equalizer"; font.family: root.font; font.pixelSize: 18; font.bold: true; color: root.cMauve }
+                    Text { text: root.showAppVol ? "App Volumes" : "Equalizer"; font.family: root.font; font.pixelSize: 18; font.bold: true; color: root.cMauve }
                     Item { Layout.fillWidth: true }
-                    Text { text: root.activePreset; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText }
-                }
-                RowLayout {
-                    Layout.fillWidth: true; Layout.fillHeight: true; spacing: 14; Layout.alignment: Qt.AlignHCenter
-                    Repeater {
-                        model: 10
-                        ColumnLayout {
-                            Layout.fillHeight: true; spacing: 8; Layout.alignment: Qt.AlignHCenter
-                            Item { id: barBox; Layout.fillHeight: true; Layout.preferredWidth: 24; Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 8; height: parent.height; radius: 4; color: Qt.rgba(0,0,0,0.3) }
-                                Rectangle { width: 8; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; radius: 4; color: root.cMauve; height: parent.height - dot.y - (dot.height / 2) }
-                                Rectangle { id: dot; width: 22; height: 22; radius: 11; color: "white"; border.color: root.cMauve; border.width: 1.5; anchors.horizontalCenter: parent.horizontalCenter; y: da.drag.active ? y : (parent.height - 22) * (1.0 - (root.eqBands[index] + 12) / 24); Behavior on y { enabled: !da.drag.active; NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
-                                    MouseArea { id: da; anchors.fill: parent; drag.target: dot; drag.axis: Drag.YAxis; drag.minimumY: 0; drag.maximumY: barBox.height - 22; onPositionChanged: if (drag.active) { var db = (1.0 - (dot.y / (barBox.height - 22))) * 24 - 12; var nb = root.eqBands.slice(); nb[index] = db; root.eqBands = nb; mProc.command = ["sh", "-c", "~/.config/scripts/eq-control.sh set-band " + index + " " + db]; mProc.running = true } }
-                                }
-                            }
-                            Text { Layout.alignment: Qt.AlignHCenter; text: (root.eqBands[index] >= 0 ? "+" : "") + root.eqBands[index].toFixed(1); font.family: root.font; font.pixelSize: 8; font.bold: true; color: root.eqBands[index] !== 0 ? root.cMauve : root.cSub }
+                    
+                    Rectangle {
+                        width: 90; height: 32; radius: 16; color: root.showAppVol ? root.cMauve : Qt.rgba(1,1,1,0.08)
+                        border.color: root.showAppVol ? "transparent" : Qt.rgba(1,1,1,0.1); border.width: 1
+                        RowLayout {
+                            anchors.centerIn: parent; spacing: 6
+                            Text { text: "󰕾"; font.family: root.font; font.pixelSize: 16; color: root.showAppVol ? "#11111b" : root.cText }
+                            Text { text: "Apps"; font.family: root.font; font.pixelSize: 13; font.bold: true; color: root.showAppVol ? "#11111b" : root.cText }
+                        }
+                        MouseArea { 
+                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: { root.showAppVol = !root.showAppVol; if(root.showAppVol) appVolProc.running = true } 
                         }
                     }
+                    
+                    Text { text: root.activePreset; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cText; visible: !root.showAppVol }
                 }
-                GridLayout {
-                    Layout.fillWidth: true; Layout.alignment: Qt.AlignHCenter; columns: 4; rowSpacing: 10; columnSpacing: 10
-                    Repeater {
-                        model: ["Flat", "Bass", "Treble", "Rock", "Pop", "Jazz", "Vocal", "Classic"]
-                        Rectangle {
-                            Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 12; color: root.activePreset === modelData ? root.cMauve : Qt.rgba(1,1,1,0.06)
-                            Text { anchors.centerIn: parent; text: modelData; font.family: root.font; font.pixelSize: 12; font.bold: root.activePreset === modelData; color: root.activePreset === modelData ? "#11111b" : root.cText }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setPreset(modelData) }
+
+                // Dynamic Area
+                Item {
+                    Layout.fillWidth: true; Layout.fillHeight: true
+
+                    // --- Equalizer View ---
+                    ColumnLayout {
+                        anchors.fill: parent; spacing: 14
+                        opacity: root.showAppVol ? 0 : 1; visible: opacity > 0
+                        Behavior on opacity { NumberAnimation { duration: 300 } }
+
+                        RowLayout {
+                            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 14; Layout.alignment: Qt.AlignHCenter
+                            Repeater {
+                                model: 10
+                                ColumnLayout {
+                                    Layout.fillHeight: true; spacing: 8; Layout.alignment: Qt.AlignHCenter
+                                    Item { id: barBox; Layout.fillHeight: true; Layout.preferredWidth: 24; Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 8; height: parent.height; radius: 4; color: Qt.rgba(0,0,0,0.3) }
+                                        Rectangle { width: 8; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; radius: 4; color: root.cMauve; height: parent.height - dot.y - (dot.height / 2) }
+                                        Rectangle { id: dot; width: 22; height: 22; radius: 11; color: "white"; border.color: root.cMauve; border.width: 1.5; anchors.horizontalCenter: parent.horizontalCenter; y: da.drag.active ? y : (parent.height - 22) * (1.0 - (root.eqBands[index] + 12) / 24); Behavior on y { enabled: !da.drag.active; NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
+                                            MouseArea { id: da; anchors.fill: parent; drag.target: dot; drag.axis: Drag.YAxis; drag.minimumY: 0; drag.maximumY: barBox.height - 22; onPositionChanged: if (drag.active) { var db = (1.0 - (dot.y / (barBox.height - 22))) * 24 - 12; var nb = root.eqBands.slice(); nb[index] = db; root.eqBands = nb; mProc.command = ["sh", "-c", "~/.config/scripts/eq-control.sh set-band " + index + " " + db]; mProc.running = true } }
+                                        }
+                                    }
+                                    Text { Layout.alignment: Qt.AlignHCenter; text: (root.eqBands[index] >= 0 ? "+" : "") + root.eqBands[index].toFixed(1); font.family: root.font; font.pixelSize: 8; font.bold: true; color: root.eqBands[index] !== 0 ? root.cMauve : root.cSub }
+                                }
+                            }
+                        }
+                        GridLayout {
+                            Layout.fillWidth: true; Layout.alignment: Qt.AlignHCenter; columns: 4; rowSpacing: 10; columnSpacing: 10
+                            Repeater {
+                                model: ["Flat", "Bass", "Treble", "Rock", "Pop", "Jazz", "Vocal", "Classic"]
+                                Rectangle {
+                                    Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 12; color: root.activePreset === modelData ? root.cMauve : Qt.rgba(1,1,1,0.06)
+                                    Text { anchors.centerIn: parent; text: modelData; font.family: root.font; font.pixelSize: 12; font.bold: root.activePreset === modelData; color: root.activePreset === modelData ? "#11111b" : root.cText }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setPreset(modelData) }
+                                }
+                            }
+                        }
+                    }
+
+                    // --- App Volumes View ---
+                    ColumnLayout {
+                        anchors.fill: parent; spacing: 10
+                        opacity: root.showAppVol ? 1 : 0; visible: opacity > 0
+                        Behavior on opacity { NumberAnimation { duration: 300 } }
+
+                        ListView {
+                            Layout.fillWidth: true; Layout.fillHeight: true
+                            clip: true
+                            model: root.appsList
+                            spacing: 10
+                            delegate: Rectangle {
+                                width: ListView.view.width; height: 60; radius: 12; color: Qt.rgba(1,1,1,0.05)
+                                RowLayout {
+                                    anchors.fill: parent; anchors.margins: 12; spacing: 12
+                                    // Icon / Mute
+                                    Rectangle {
+                                        width: 36; height: 36; radius: 18; color: modelData.muted ? Qt.rgba(root.cRed.r, root.cRed.g, root.cRed.b, 0.2) : Qt.rgba(root.cMauve.r, root.cMauve.g, root.cMauve.b, 0.1)
+                                        Text { anchors.centerIn: parent; text: modelData.muted ? "󰝟" : modelData.icon; font.family: root.font; font.pixelSize: 18; color: modelData.muted ? root.cRed : root.cMauve }
+                                        MouseArea {
+                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                mProc.command = ["sh", "-c", "~/.config/scripts/app-volume.sh toggle-mute " + modelData.id]
+                                                mProc.running = true
+                                                appVolProc.running = true
+                                            }
+                                        }
+                                    }
+                                    
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 4
+                                        Text { text: modelData.label; font.family: root.font; font.pixelSize: 13; font.bold: true; color: root.cText; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        
+                                        Item {
+                                            Layout.fillWidth: true; Layout.preferredHeight: 18
+                                            Process { id: volProc }
+                                            Rectangle {
+                                                anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 6; radius: 3; color: Qt.rgba(0,0,0,0.3)
+                                                Rectangle {
+                                                    width: Math.max(0, Math.min(parent.width, parent.width * (modelData.volume / 100.0)))
+                                                    height: parent.height; radius: 3; color: modelData.muted ? root.cSub : root.cMauve
+                                                }
+                                                Rectangle {
+                                                    id: appDot; width: 14; height: 14; radius: 7; color: "white"; border.color: modelData.muted ? root.cSub : root.cMauve; border.width: 1.5
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    x: appDa.drag.active ? x : Math.max(0, Math.min(parent.width - 14, (parent.width - 14) * (modelData.volume / 100.0)))
+                                                    MouseArea {
+                                                        id: appDa; anchors.fill: parent; drag.target: appDot; drag.axis: Drag.XAxis; drag.minimumX: 0; drag.maximumX: parent.parent.width - 14
+                                                        onPressed: root.draggingVol = true
+                                                        onPositionChanged: {
+                                                            if (drag.active && !volProc.running) {
+                                                                var newVol = Math.round((appDot.x / (parent.parent.width - 14)) * 100.0)
+                                                                volProc.command = ["sh", "-c", "~/.config/scripts/app-volume.sh set " + modelData.id + " " + newVol]
+                                                                volProc.running = true
+                                                            }
+                                                        }
+                                                        onReleased: {
+                                                            root.draggingVol = false
+                                                            var newVol = Math.round((appDot.x / (parent.parent.width - 14)) * 100.0)
+                                                            mProc.command = ["sh", "-c", "~/.config/scripts/app-volume.sh set " + modelData.id + " " + newVol]
+                                                            mProc.running = true
+                                                            appVolProc.running = true
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Text { text: modelData.volume + "%"; font.family: root.font; font.pixelSize: 12; color: root.cText; Layout.preferredWidth: 35; horizontalAlignment: Text.AlignRight }
+                                }
+                            }
+                        }
+                        Item {
+                            Layout.fillWidth: true; Layout.fillHeight: true
+                            visible: root.appsList.length === 0
+                            Text { anchors.centerIn: parent; text: "No active audio apps"; font.family: root.font; font.pixelSize: 14; color: root.cSub }
                         }
                     }
                 }
