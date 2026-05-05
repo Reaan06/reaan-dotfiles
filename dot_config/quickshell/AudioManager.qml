@@ -285,8 +285,23 @@ Item {
                                     anchors.fill: parent; anchors.margins: 12; spacing: 12
                                     // Icon / Mute
                                     Rectangle {
-                                        width: 36; height: 36; radius: 18; color: modelData.muted ? Qt.rgba(root.cRed.r, root.cRed.g, root.cRed.b, 0.2) : Qt.rgba(root.cMauve.r, root.cMauve.g, root.cMauve.b, 0.1)
-                                        Text { anchors.centerIn: parent; text: modelData.muted ? "󰝟" : modelData.icon; font.family: root.font; font.pixelSize: 18; color: modelData.muted ? root.cRed : root.cMauve }
+                                        width: 42; height: 42; radius: 12; color: modelData.muted ? Qt.rgba(root.cRed.r, root.cRed.g, root.cRed.b, 0.2) : Qt.rgba(root.cMauve.r, root.cMauve.g, root.cMauve.b, 0.1)
+                                        
+                                        Image {
+                                            anchors.fill: parent; anchors.margins: 6
+                                            source: modelData.icon_name ? "image://icon/" + modelData.icon_name.toLowerCase() : ""
+                                            fillMode: Image.PreserveAspectFit
+                                            visible: status === Image.Ready && !modelData.muted
+                                        }
+
+                                        Text { 
+                                            anchors.centerIn: parent
+                                            text: modelData.muted ? "󰝟" : modelData.icon
+                                            font.family: root.font; font.pixelSize: 22
+                                            color: modelData.muted ? root.cRed : root.cMauve
+                                            visible: !modelData.muted ? (parent.children[0].status !== Image.Ready) : true
+                                        }
+
                                         MouseArea {
                                             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                             onClicked: {
@@ -302,33 +317,47 @@ Item {
                                         Text { text: modelData.label; font.family: root.font; font.pixelSize: 13; font.bold: true; color: root.cText; elide: Text.ElideRight; Layout.fillWidth: true }
                                         
                                         Item {
-                                            Layout.fillWidth: true; Layout.preferredHeight: 18
+                                            Layout.fillWidth: true; Layout.preferredHeight: 22
                                             Process { id: volProc }
                                             Rectangle {
-                                                anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 6; radius: 3; color: Qt.rgba(0,0,0,0.3)
+                                                id: trackBar; anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 8; radius: 4; color: Qt.rgba(0,0,0,0.3)
+                                                
                                                 Rectangle {
                                                     width: Math.max(0, Math.min(parent.width, parent.width * (modelData.volume / 100.0)))
-                                                    height: parent.height; radius: 3; color: modelData.muted ? root.cSub : root.cMauve
+                                                    height: parent.height; radius: 4; color: modelData.muted ? root.cSub : root.cMauve
+                                                    visible: !appDa.drag.active
                                                 }
+
+                                                // Progress bar while dragging (immediate feedback)
                                                 Rectangle {
-                                                    id: appDot; width: 14; height: 14; radius: 7; color: "white"; border.color: modelData.muted ? root.cSub : root.cMauve; border.width: 1.5
+                                                    width: appDot.x + 8; height: parent.height; radius: 4; color: root.cMauve
+                                                    visible: appDa.drag.active
+                                                }
+
+                                                Rectangle {
+                                                    id: appDot; width: 18; height: 18; radius: 9; color: "white"; border.color: modelData.muted ? root.cSub : root.cMauve; border.width: 2
                                                     anchors.verticalCenter: parent.verticalCenter
-                                                    x: appDa.drag.active ? x : Math.max(0, Math.min(parent.width - 14, (parent.width - 14) * (modelData.volume / 100.0)))
+                                                    x: appDa.drag.active ? x : Math.max(0, Math.min(parent.width - 18, (parent.width - 18) * (modelData.volume / 100.0)))
+                                                    
                                                     MouseArea {
-                                                        id: appDa; anchors.fill: parent; drag.target: appDot; drag.axis: Drag.XAxis; drag.minimumX: 0; drag.maximumX: parent.parent.width - 14
+                                                        id: appDa; anchors.fill: parent; anchors.margins: -10; drag.target: appDot; drag.axis: Drag.XAxis; drag.minimumX: 0; drag.maximumX: trackBar.width - 18
                                                         onPressed: root.draggingVol = true
                                                         onPositionChanged: {
-                                                            if (drag.active && !volProc.running) {
-                                                                var newVol = Math.round((appDot.x / (parent.parent.width - 14)) * 100.0)
-                                                                volProc.command = ["sh", "-c", "~/.config/scripts/app-volume.sh set " + modelData.id + " " + newVol]
-                                                                volProc.running = true
+                                                            if (drag.active) {
+                                                                var newVol = Math.round((appDot.x / (trackBar.width - 18)) * 100.0)
+                                                                // Debounce: solo ejecutar si no hay proceso corriendo para no saturar pactl
+                                                                if (!volProc.running) {
+                                                                    volProc.command = ["sh", "-c", "~/.config/scripts/app-volume.sh set " + modelData.id + " " + newVol]
+                                                                    volProc.running = true
+                                                                }
                                                             }
                                                         }
                                                         onReleased: {
                                                             root.draggingVol = false
-                                                            var newVol = Math.round((appDot.x / (parent.parent.width - 14)) * 100.0)
+                                                            var newVol = Math.round((appDot.x / (trackBar.width - 18)) * 100.0)
                                                             mProc.command = ["sh", "-c", "~/.config/scripts/app-volume.sh set " + modelData.id + " " + newVol]
                                                             mProc.running = true
+                                                            // Forzar actualización inmediata después del arrastre
                                                             appVolProc.running = true
                                                         }
                                                     }
@@ -336,7 +365,7 @@ Item {
                                             }
                                         }
                                     }
-                                    Text { text: modelData.volume + "%"; font.family: root.font; font.pixelSize: 12; color: root.cText; Layout.preferredWidth: 35; horizontalAlignment: Text.AlignRight }
+                                    Text { text: (appDa.drag.active ? Math.round((appDot.x / (trackBar.width - 18)) * 100.0) : modelData.volume) + "%"; font.family: root.font; font.pixelSize: 12; color: root.cText; Layout.preferredWidth: 35; horizontalAlignment: Text.AlignRight }
                                 }
                             }
                         }
