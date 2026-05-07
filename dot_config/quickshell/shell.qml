@@ -171,8 +171,8 @@ ShellRoot {
                 left: (screen.width - width) / 2
             }
 
-            implicitWidth: Math.min(1200, screen.width * 0.9)
-            implicitHeight: Math.min(800, screen.height * 0.85)
+            implicitWidth: screen.width * 0.9
+            implicitHeight: screen.height * 0.85
             exclusionMode: ExclusionMode.Ignore; color: "transparent"
 
             SuperF2Panel {

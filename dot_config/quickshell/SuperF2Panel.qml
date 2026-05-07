@@ -93,8 +93,8 @@ Item {
             id: container
             Layout.fillWidth: true; 
             Layout.fillHeight: true; 
-            radius: 40 * root.scale; color: root.cBg
-            border.color: Qt.rgba(1,1,1,0.1); border.width: 1.5 * root.scale
+            radius: 32 * root.scale; color: root.cBg
+            border.color: Qt.rgba(1,1,1,0.1); border.width: 1.2 * root.scale
 
             ColumnLayout {
                 anchors.fill: parent; anchors.margins: 40 * root.scale; spacing: 24 * root.scale

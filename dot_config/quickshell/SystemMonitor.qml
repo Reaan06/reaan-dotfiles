@@ -204,14 +204,14 @@ Rectangle {
                     Canvas { id: netCanvas; Layout.fillWidth: true; Layout.preferredHeight: 80 * root.scale
                         onPaint: { var ctx = getContext("2d"); ctx.clearRect(0, 0, width, height); let h = root.stats.net.history || []; if (h.length < 2) return; let maxV = Math.max(...h, 50); let step = width / (h.length - 1); var grad = ctx.createLinearGradient(0, 0, 0, height); grad.addColorStop(0, Qt.rgba(root.cPeach.r, root.cPeach.g, root.cPeach.b, 0.2)); grad.addColorStop(1, "transparent"); ctx.beginPath(); ctx.moveTo(0, height); for (let i = 0; i < h.length; i++) ctx.lineTo(i * step, height - (h[i] / maxV) * height); ctx.lineTo(width, height); ctx.fillStyle = grad; ctx.fill(); ctx.beginPath(); ctx.moveTo(0, height - (h[0] / maxV) * height); for (let i = 1; i < h.length; i++) ctx.lineTo(i * step, height - (h[i] / maxV) * height); ctx.strokeStyle = root.cPeach; ctx.lineWidth = 2 * root.scale; ctx.stroke(); }
                     }
-                    RowLayout { spacing: 20 * root.scale
-                        ColumnLayout { 
-                            Text { text: "DOWN"; font.family: root.font; font.pixelSize: 10 * root.scale; color: root.cSub }
-                            Text { text: (root.stats.net.t_down || 0).toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 14 * root.scale; font.bold: true; color: root.cText } 
+                    RowLayout { spacing: 20 * root.scale; Layout.alignment: Qt.AlignHCenter
+                        ColumnLayout { Layout.alignment: Qt.AlignHCenter
+                            Text { text: "DOWN"; font.family: root.font; font.pixelSize: 10 * root.scale; color: root.cSub; Layout.alignment: Qt.AlignHCenter }
+                            Text { text: (root.stats.net.t_down || 0).toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 14 * root.scale; font.bold: true; color: root.cText; Layout.alignment: Qt.AlignHCenter } 
                         }
-                        ColumnLayout { 
-                            Text { text: "UP"; font.family: root.font; font.pixelSize: 10 * root.scale; color: root.cSub }
-                            Text { text: (root.stats.net.t_up || 0).toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 14 * root.scale; font.bold: true; color: root.cText } 
+                        ColumnLayout { Layout.alignment: Qt.AlignHCenter
+                            Text { text: "UP"; font.family: root.font; font.pixelSize: 10 * root.scale; color: root.cSub; Layout.alignment: Qt.AlignHCenter }
+                            Text { text: (root.stats.net.t_up || 0).toFixed(2) + " GB"; font.family: root.font; font.pixelSize: 14 * root.scale; font.bold: true; color: root.cText; Layout.alignment: Qt.AlignHCenter } 
                         } 
                     }
                 }
