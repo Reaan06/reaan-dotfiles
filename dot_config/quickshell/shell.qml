@@ -14,7 +14,9 @@ ShellRoot {
 
     // ── Global state for AudioManager & Super F2 ──
     property bool audioManagerVisible: false
+    property string audioManagerMonitor: ""
     property bool superF2Visible: false
+    property string superF2Monitor: ""
     property bool amAnimating: false
     property bool f2Animating: false
     property string _lastAmState: ""
@@ -28,11 +30,15 @@ ShellRoot {
                 var parts = text.trim().split("---")
                 if (parts.length < 2) return
                 
-                var amRaw = parts[0].trim()
-                var f2Raw = parts[1].trim()
+                var amRawFull = parts[0].trim()
+                var f2RawFull = parts[1].trim()
 
-                if (amRaw !== _lastAmState) {
-                    _lastAmState = amRaw
+                if (amRawFull !== _lastAmState) {
+                    _lastAmState = amRawFull
+                    var amParts = amRawFull.split(" ")
+                    var amRaw = amParts[0]
+                    audioManagerMonitor = amParts.length > 1 ? amParts[1] : ""
+
                     var newVal = (amRaw === "visible")
                     if (!newVal && audioManagerVisible) {
                         amAnimating = true
@@ -43,8 +49,12 @@ ShellRoot {
                     }
                     audioManagerVisible = newVal
                 }
-                if (f2Raw !== _lastF2State) {
-                    _lastF2State = f2Raw
+                if (f2RawFull !== _lastF2State) {
+                    _lastF2State = f2RawFull
+                    var f2Parts = f2RawFull.split(" ")
+                    var f2Raw = f2Parts[0]
+                    superF2Monitor = f2Parts.length > 1 ? f2Parts[1] : ""
+
                     var newValF2 = (f2Raw === "visible")
                     if (!newValF2 && superF2Visible) {
                         f2Animating = true
@@ -109,7 +119,7 @@ ShellRoot {
             id: audioManagerWin
             property var modelData
             screen: modelData
-            visible: audioManagerVisible || amAnimating
+            visible: (audioManagerVisible || amAnimating) && screen.name === audioManagerMonitor
             anchors.top: true; anchors.left: true
             
             // Coordenada X global del ancla (16px de margen de la barra + posición local del módulo)
@@ -126,7 +136,8 @@ ShellRoot {
 
             Behavior on margins.left { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
 
-            implicitWidth: 500; implicitHeight: 662
+            implicitWidth: Math.max(450, screen.width * 0.3)
+            implicitHeight: Math.max(620, screen.height * 0.65)
             exclusionMode: ExclusionMode.Ignore; color: "transparent"
 
             AudioManager {
@@ -135,6 +146,7 @@ ShellRoot {
                 anchorWidth: audioManagerWin.anchorWidth
                 // El cuello del conector persigue al ancla si el panel está desplazado por el clamping
                 neckOffset: worldAnchorX - (audioManagerWin.x + audioManagerWin.width / 2)
+                scale: Math.max(0.7, Math.min(width / 500, height / 662))
             }
         }
     }
@@ -146,7 +158,7 @@ ShellRoot {
             id: superF2Win
             property var modelData
             screen: modelData
-            visible: superF2Visible || f2Animating
+            visible: (superF2Visible || f2Animating) && screen.name === superF2Monitor
             anchors.top: true; anchors.left: true
             
             // Coordenada X global del reloj
@@ -156,10 +168,11 @@ ShellRoot {
             margins {
                 top: 48
                 // Panel siempre centrado perfectamente en el monitor
-                left: (screen.width - 1200) / 2
+                left: (screen.width - width) / 2
             }
 
-            implicitWidth: 1200; implicitHeight: 762
+            implicitWidth: screen.width * 0.8
+            implicitHeight: screen.height * 0.75
             exclusionMode: ExclusionMode.Ignore; color: "transparent"
 
             SuperF2Panel {
@@ -168,6 +181,7 @@ ShellRoot {
                 anchorWidth: superF2Win.clockWidth
                 // El conector se desplaza dinámicamente para unirse al reloj
                 neckOffset: worldClockX - (superF2Win.x + superF2Win.width / 2)
+                scale: Math.max(0.7, Math.min(width / 1200, height / 762))
             }
         }
     }

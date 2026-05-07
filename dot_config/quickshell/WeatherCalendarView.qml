@@ -7,11 +7,13 @@ import Quickshell.Io
 /**
  * @component WeatherCalendarView
  * @description Optimized master layout for the Weather Dashboard.
- * Now fully dynamic with wallpaper colors.
+ * Now fully dynamic with wallpaper colors and absolute proportionality.
  */
 Item {
     id: root
     anchors.fill: parent
+
+    property real scale: (parent && parent.scale) ? parent.scale : 1.0
 
     // ═══════════════════════════════════════════════
     // THEME — Dinámico
@@ -56,54 +58,60 @@ Item {
     WeatherManager { id: weatherManager }
 
     RowLayout {
-        anchors.fill: parent; anchors.margins: 20; spacing: 25
+        anchors.fill: parent; anchors.margins: 20 * root.scale; spacing: 25 * root.scale
 
         WeatherCalendar {
-            Layout.preferredWidth: 290; Layout.preferredHeight: 340; Layout.fillHeight: false; Layout.alignment: Qt.AlignTop
+            Layout.preferredWidth: 290 * root.scale; Layout.preferredHeight: 340 * root.scale; Layout.fillHeight: false; Layout.alignment: Qt.AlignTop
             selectedDate: weatherManager.selectedDate; todayDate: weatherManager.weatherData.current_date || ""; onDateSelected: (date) => weatherManager.selectedDate = date
+            // Passing scale to child component
+            property real scale: root.scale
         }
 
         ColumnLayout {
-            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 25
+            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 25 * root.scale
 
             Rectangle {
-                id: heroWidget; Layout.fillWidth: true; Layout.preferredHeight: 130; radius: 40; color: root.cBg; border.color: Qt.rgba(1, 1, 1, 0.05); clip: true
+                id: heroWidget; Layout.fillWidth: true; Layout.preferredHeight: 130 * root.scale; radius: 40 * root.scale; color: root.cBg; border.color: Qt.rgba(1, 1, 1, 0.05); clip: true
                 RowLayout {
-                    anchors.fill: parent; anchors.leftMargin: 45; anchors.rightMargin: 45; spacing: 30
+                    anchors.fill: parent; anchors.leftMargin: 45 * root.scale; anchors.rightMargin: 45 * root.scale; spacing: 30 * root.scale
                     ColumnLayout {
-                        spacing: 8; Layout.fillWidth: true
-                        Text { text: weatherManager.loading ? "Localizando..." : (weatherManager.weatherData.city || "Clima"); font.family: "JetBrains Mono Nerd Font"; font.pixelSize: 34; font.bold: true; color: root.cText; elide: Text.ElideRight }
+                        spacing: 8 * root.scale; Layout.fillWidth: true
+                        Text { text: weatherManager.loading ? "Localizando..." : (weatherManager.weatherData.city || "Clima"); font.family: "JetBrains Mono Nerd Font"; font.pixelSize: 34 * root.scale; font.bold: true; color: root.cText; elide: Text.ElideRight }
                         Row {
-                            spacing: 8
-                            Rectangle { width: 4; height: 18; radius: 2; color: root.cMauve; anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: weatherManager.selectedDate === weatherManager.weatherData.current_date ? "PRONÓSTICO HOY" : "HISTORIAL: " + weatherManager.selectedDate; font.family: "JetBrains Mono Nerd Font"; font.pixelSize: 14; color: root.cSub; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+                            spacing: 8 * root.scale
+                            Rectangle { width: 4 * root.scale; height: 18 * root.scale; radius: 2 * root.scale; color: root.cMauve; anchors.verticalCenter: parent.verticalCenter }
+                            Text { text: weatherManager.selectedDate === weatherManager.weatherData.current_date ? "PRONÓSTICO HOY" : "HISTORIAL: " + weatherManager.selectedDate; font.family: "JetBrains Mono Nerd Font"; font.pixelSize: 14 * root.scale; color: root.cSub; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
                         }
                     }
                     RowLayout {
-                        spacing: 25; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        spacing: 25 * root.scale; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         Text { 
                             property var dayData: weatherManager.weatherData.days ? weatherManager.weatherData.days[weatherManager.selectedDate] : null
                             text: (dayData && dayData[0]) ? Math.round(dayData[0].temp) + "°C" : "--°C"
-                            font.family: "JetBrains Mono Nerd Font"; font.pixelSize: 56; font.bold: true; color: root.cMauve 
+                            font.family: "JetBrains Mono Nerd Font"; font.pixelSize: 56 * root.scale; font.bold: true; color: root.cMauve 
                         }
                         Rectangle {
-                            width: 80; height: 80; radius: 24; color: Qt.rgba(root.cMauve.r, root.cMauve.g, root.cMauve.b, 0.1)
-                            Text { anchors.centerIn: parent; text: "󰖐"; font.pixelSize: 42; color: root.cBlue }
+                            width: 80 * root.scale; height: 80 * root.scale; radius: 24 * root.scale; color: Qt.rgba(root.cMauve.r, root.cMauve.g, root.cMauve.b, 0.1)
+                            Text { anchors.centerIn: parent; text: "󰖐"; font.pixelSize: 42 * root.scale; color: root.cBlue }
                         }
                     }
                 }
             }
 
             WeatherTimeline {
-                Layout.fillWidth: true; Layout.preferredHeight: 280
+                Layout.fillWidth: true; Layout.preferredHeight: 280 * root.scale
                 hourlyData: (weatherManager.weatherData.days && weatherManager.selectedDate) ? weatherManager.weatherData.days[weatherManager.selectedDate] : []
+                // Passing scale to child component
+                property real scale: root.scale
             }
             Item { Layout.fillHeight: true }
         }
 
         WeatherDetails {
-            Layout.preferredWidth: 290; Layout.preferredHeight: 340; Layout.fillHeight: false; Layout.alignment: Qt.AlignTop
+            Layout.preferredWidth: 290 * root.scale; Layout.preferredHeight: 340 * root.scale; Layout.fillHeight: false; Layout.alignment: Qt.AlignTop
             currentData: (weatherManager.weatherData.days && weatherManager.selectedDate) ? weatherManager.weatherData.days[weatherManager.selectedDate][0] : null
+            // Passing scale to child component
+            property real scale: root.scale
         }
     }
 }
