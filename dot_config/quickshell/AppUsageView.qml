@@ -7,6 +7,7 @@ import Quickshell.Io
 Item {
     id: root
 
+    property real scale: (parent && parent.scale) ? parent.scale : 1.0
     readonly property string fontFamily: "JetBrains Mono Nerd Font"
     property color cText:    "#cdd6f4"
     property color cSub:     "#6c7086"
@@ -141,31 +142,31 @@ Item {
     // ─── UI ───────────────────────────────────────────────────────────
     ColumnLayout {
         anchors.fill: parent
-        spacing: 16
+        spacing: 16 * root.scale
 
         // Header
         RowLayout {
             Layout.fillWidth: true
-            spacing: 14
+            spacing: 14 * root.scale
 
             Rectangle {
-                width: 44; height: 44; radius: 12
+                width: 44 * root.scale; height: 44 * root.scale; radius: 12 * root.scale
                 color: Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.15)
                 Text {
                     anchors.centerIn: parent
                     text: "󰣆"; font.family: root.fontFamily
-                    font.pixelSize: 22; color: root.cAccent
+                    font.pixelSize: 22 * root.scale; color: root.cAccent
                 }
             }
             ColumnLayout {
-                spacing: 2
+                spacing: 2 * root.scale
                 Text {
                     text: "USO DE APLICACIONES"
-                    font.family: root.fontFamily; font.pixelSize: 16; font.bold: true
+                    font.family: root.fontFamily; font.pixelSize: 16 * root.scale; font.bold: true
                     color: root.cText
                 }
                 RowLayout {
-                    spacing: 12
+                    spacing: 12 * root.scale
                     Repeater {
                         model: [
                             { id: "daily", label: "HOY" },
@@ -173,15 +174,15 @@ Item {
                             { id: "monthly", label: "MES" }
                         ]
                         Rectangle {
-                            width: btnTxt.implicitWidth + 16; height: 20; radius: 10
+                            width: btnTxt.implicitWidth + 16 * root.scale; height: 20 * root.scale; radius: 10 * root.scale
                             color: root.currentView === modelData.id ? Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.2) : (btnMA.containsMouse ? Qt.rgba(1,1,1,0.05) : "transparent")
-                            border.width: root.currentView === modelData.id ? 1 : 0
+                            border.width: root.currentView === modelData.id ? 1 * root.scale : 0
                             border.color: Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.5)
                             Behavior on color { ColorAnimation { duration: 100 } }
                             Text {
                                 id: btnTxt; anchors.centerIn: parent
                                 text: modelData.label
-                                font.family: root.fontFamily; font.pixelSize: 10
+                                font.family: root.fontFamily; font.pixelSize: 10 * root.scale
                                 color: root.currentView === modelData.id ? root.cAccent : root.cSub
                                 font.bold: root.currentView === modelData.id
                             }
@@ -193,18 +194,18 @@ Item {
                     }
                     Text {
                         text: "• " + appModel.count + " apps | Total uso PC: " + root.formatTime(root.totalTime)
-                        font.family: root.fontFamily; font.pixelSize: 11
+                        font.family: root.fontFamily; font.pixelSize: 11 * root.scale
                         color: Qt.rgba(root.cSub.r, root.cSub.g, root.cSub.b, 0.6)
                     }
                     Text {
                         text: "• 󰮯 " + root.pacmanCount
-                        font.family: root.fontFamily; font.pixelSize: 11
+                        font.family: root.fontFamily; font.pixelSize: 11 * root.scale
                         color: root.cBlue
                         visible: root.pacmanCount > 0
                     }
                     Text {
                         text: "• 󰣚 " + root.yayCount
-                        font.family: root.fontFamily; font.pixelSize: 11
+                        font.family: root.fontFamily; font.pixelSize: 11 * root.scale
                         color: "#eba0ac" // Peach/Rose color for yay/AUR
                         visible: root.yayCount > 0
                     }
@@ -216,13 +217,13 @@ Item {
         // Column headers
         RowLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: 12; Layout.rightMargin: 12
-            Text { text: "APLICACIÓN";   font.family: root.fontFamily; font.pixelSize: 11; color: root.cSub; Layout.fillWidth: true }
-            Text { text: "APERTURAS";    font.family: root.fontFamily; font.pixelSize: 11; color: root.cSub; Layout.preferredWidth: 90 }
-            Text { text: "TIEMPO";       font.family: root.fontFamily; font.pixelSize: 11; color: root.cSub; Layout.preferredWidth: 80; horizontalAlignment: Text.AlignRight }
+            Layout.leftMargin: 12 * root.scale; Layout.rightMargin: 12 * root.scale
+            Text { text: "APLICACIÓN";   font.family: root.fontFamily; font.pixelSize: 11 * root.scale; color: root.cSub; Layout.fillWidth: true }
+            Text { text: "APERTURAS";    font.family: root.fontFamily; font.pixelSize: 11 * root.scale; color: root.cSub; Layout.preferredWidth: 90 * root.scale }
+            Text { text: "TIEMPO";       font.family: root.fontFamily; font.pixelSize: 11 * root.scale; color: root.cSub; Layout.preferredWidth: 80 * root.scale; horizontalAlignment: Text.AlignRight }
         }
 
-        Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(1,1,1,0.07) }
+        Rectangle { Layout.fillWidth: true; height: 1 * root.scale; color: Qt.rgba(1,1,1,0.07) }
 
         // Lista con scroll
         Item {
@@ -232,23 +233,23 @@ Item {
             // Empty state (solo cuando no hay datos)
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 12
+                spacing: 12 * root.scale
                 visible: appModel.count === 0
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     text: "󰔛"
-                    font.family: root.fontFamily; font.pixelSize: 48; color: root.cSub
+                    font.family: root.fontFamily; font.pixelSize: 48 * root.scale; color: root.cSub
                 }
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     text: "Sin datos de uso aún"
-                    font.family: root.fontFamily; font.pixelSize: 14; color: root.cSub
+                    font.family: root.fontFamily; font.pixelSize: 14 * root.scale; color: root.cSub
                 }
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     text: "Los datos se acumulan mientras usas el sistema"
-                    font.family: root.fontFamily; font.pixelSize: 11
+                    font.family: root.fontFamily; font.pixelSize: 11 * root.scale
                     color: Qt.rgba(root.cSub.r, root.cSub.g, root.cSub.b, 0.6)
                 }
             }
@@ -257,10 +258,10 @@ Item {
             ListView {
                 id: appList
                 anchors.fill: parent
-                anchors.rightMargin: 10
+                anchors.rightMargin: 10 * root.scale
                 model: appModel
                 clip: true
-                spacing: 6
+                spacing: 6 * root.scale
                 visible: appModel.count > 0
                 boundsBehavior: Flickable.StopAtBounds
                 flickDeceleration: 1500
@@ -270,32 +271,32 @@ Item {
                     policy: ScrollBar.AlwaysOn
                     minimumSize: 0.05
                     contentItem: Rectangle {
-                        implicitWidth: 5
-                        radius: 3
+                        implicitWidth: 5 * root.scale
+                        radius: 3 * root.scale
                         color: vScrollBar.pressed
                             ? root.cAccent
                             : Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.5)
                         Behavior on color { ColorAnimation { duration: 150 } }
                     }
                     background: Rectangle {
-                        implicitWidth: 5
-                        radius: 3
+                        implicitWidth: 5 * root.scale
+                        radius: 3 * root.scale
                         color: Qt.rgba(1, 1, 1, 0.05)
                     }
                 }
 
                 delegate: Rectangle {
                     width: appList.width
-                    height: 58
-                    radius: 12
+                    height: 58 * root.scale
+                    radius: 12 * root.scale
                     color: root.cSurface
 
                     // Barra lateral de posición
                     Rectangle {
-                        width: 3; height: parent.height * 0.6
+                        width: 3 * root.scale; height: parent.height * 0.6
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.left: parent.left
-                        radius: 2
+                        radius: 2 * root.scale
                         color: {
                             if (index === 0) return root.cAccent
                             if (index === 1) return root.cBlue
@@ -305,16 +306,16 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 12
-                        anchors.leftMargin: 16
-                        spacing: 12
+                        anchors.margins: 12 * root.scale
+                        anchors.leftMargin: 16 * root.scale
+                        spacing: 12 * root.scale
 
                         // Icono con fallback a letra
                         Item {
-                            width: 34; height: 34
+                            width: 34 * root.scale; height: 34 * root.scale
 
                             Rectangle {
-                                anchors.fill: parent; radius: 9
+                                anchors.fill: parent; radius: 9 * root.scale
                                 color: {
                                     if (index === 0) return Qt.rgba(root.cAccent.r, root.cAccent.g, root.cAccent.b, 0.18)
                                     if (index === 1) return Qt.rgba(root.cBlue.r,   root.cBlue.g,   root.cBlue.b,   0.18)
@@ -324,7 +325,7 @@ Item {
 
                             Image {
                                 id: appIcon
-                                anchors.fill: parent; anchors.margins: 4
+                                anchors.fill: parent; anchors.margins: 4 * root.scale
                                 // Limpieza rápida del nombre para la URL
                                 source: model.name ? "image://icon/" + model.name.toLowerCase() : ""
                                 fillMode: Image.PreserveAspectFit
@@ -338,7 +339,7 @@ Item {
                                 anchors.centerIn: parent
                                 // Fallback a la primera letra si no hay icono
                                 text: (model.name && model.name.length > 0) ? model.name.charAt(0).toUpperCase() : "?"
-                                font.family: root.fontFamily; font.pixelSize: 16; font.bold: true
+                                font.family: root.fontFamily; font.pixelSize: 16 * root.scale; font.bold: true
                                 color: index === 0 ? root.cAccent : (index === 1 ? root.cBlue : root.cGreen)
                                 visible: !appIcon.visible || appIcon.status === Image.Error
                             }
@@ -349,27 +350,27 @@ Item {
                             Layout.fillWidth: true
                             text: model.name
                             color: root.cText; font.family: root.fontFamily
-                            font.pixelSize: 14; font.bold: true
+                            font.pixelSize: 14 * root.scale; font.bold: true
                             elide: Text.ElideRight
                         }
 
                         // Aperturas
                         Row {
-                            Layout.preferredWidth: 90
-                            spacing: 5
-                            Text { text: "󰏌"; font.family: root.fontFamily; font.pixelSize: 13; color: root.cSub }
+                            Layout.preferredWidth: 90 * root.scale
+                            spacing: 5 * root.scale
+                            Text { text: "󰏌"; font.family: root.fontFamily; font.pixelSize: 13 * root.scale; color: root.cSub }
                             Text {
                                 text: model.opens + "x"
-                                color: root.cSub; font.family: root.fontFamily; font.pixelSize: 13
+                                color: root.cSub; font.family: root.fontFamily; font.pixelSize: 13 * root.scale
                             }
                         }
 
                         // Tiempo
                         Text {
-                            Layout.preferredWidth: 80
+                            Layout.preferredWidth: 80 * root.scale
                             text: root.formatTime(model.time)
                             color: root.cText; font.family: root.fontFamily
-                            font.pixelSize: 14; font.bold: true
+                            font.pixelSize: 14 * root.scale; font.bold: true
                             horizontalAlignment: Text.AlignRight
                         }
                     }
