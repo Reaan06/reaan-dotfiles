@@ -171,8 +171,8 @@ ShellRoot {
                 left: (screen.width - width) / 2
             }
 
-            implicitWidth: screen.width * 0.8
-            implicitHeight: screen.height * 0.75
+            implicitWidth: Math.min(1200, screen.width * 0.9)
+            implicitHeight: Math.min(800, screen.height * 0.85)
             exclusionMode: ExclusionMode.Ignore; color: "transparent"
 
             SuperF2Panel {
@@ -181,7 +181,7 @@ ShellRoot {
                 anchorWidth: superF2Win.clockWidth
                 // El conector se desplaza dinámicamente para unirse al reloj
                 neckOffset: worldClockX - (superF2Win.x + superF2Win.width / 2)
-                scale: Math.max(0.7, Math.min(width / 1200, height / 762))
+                scale: Math.max(0.65, Math.min(parent.width / 1200, parent.height / 800))
             }
         }
     }
