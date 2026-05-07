@@ -64,7 +64,7 @@ Item {
             Layout.preferredWidth: 290 * root.scale; Layout.preferredHeight: 340 * root.scale; Layout.fillHeight: false; Layout.alignment: Qt.AlignTop
             selectedDate: weatherManager.selectedDate; todayDate: weatherManager.weatherData.current_date || ""; onDateSelected: (date) => weatherManager.selectedDate = date
             // Passing scale to child component
-            property real scale: root.scale
+            scale: root.scale
         }
 
         ColumnLayout {
@@ -102,7 +102,7 @@ Item {
                 Layout.fillWidth: true; Layout.preferredHeight: 280 * root.scale
                 hourlyData: (weatherManager.weatherData.days && weatherManager.selectedDate) ? weatherManager.weatherData.days[weatherManager.selectedDate] : []
                 // Passing scale to child component
-                property real scale: root.scale
+                scale: root.scale
             }
             Item { Layout.fillHeight: true }
         }
@@ -111,7 +111,7 @@ Item {
             Layout.preferredWidth: 290 * root.scale; Layout.preferredHeight: 340 * root.scale; Layout.fillHeight: false; Layout.alignment: Qt.AlignTop
             currentData: (weatherManager.weatherData.days && weatherManager.selectedDate) ? weatherManager.weatherData.days[weatherManager.selectedDate][0] : null
             // Passing scale to child component
-            property real scale: root.scale
+            scale: root.scale
         }
     }
 }

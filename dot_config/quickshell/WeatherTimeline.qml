@@ -14,8 +14,9 @@ Item {
     
     /** @property hourlyData: Full 24-hour forecast array from WeatherManager */
     property var hourlyData: []
+    property real scale: 1.0
     
-    implicitHeight: 200
+    implicitHeight: 200 * root.scale
     
     readonly property string font: "JetBrains Mono Nerd Font"
     property color cBlue: "#89b4fa"
@@ -49,14 +50,14 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 12
+        spacing: 12 * root.scale
         
         // Custom top-aligned scrollbar
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 3
+            Layout.preferredHeight: 3 * root.scale
             color: Qt.rgba(1, 1, 1, 0.05)
-            radius: 1.5
+            radius: 1.5 * root.scale
             
             Rectangle {
                 id: scrollThumb
@@ -65,7 +66,7 @@ Item {
                 color: root.cMauve
                 
                 // Logic to calculate width and position
-                width: Math.max(40, (listView.width / listView.contentWidth) * listView.width)
+                width: Math.max(40 * root.scale, (listView.width / listView.contentWidth) * listView.width)
                 x: (listView.contentX / (listView.contentWidth - listView.width)) * (parent.width - width)
                 
                 visible: listView.contentWidth > listView.width
@@ -75,7 +76,7 @@ Item {
         Text { 
             text: "PRONÓSTICO PRÓXIMAS 24 HORAS"
             font.family: root.font
-            font.pixelSize: 13
+            font.pixelSize: 13 * root.scale
             font.bold: true
             color: root.cBlue
             opacity: 0.9
@@ -86,7 +87,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             orientation: ListView.Horizontal
-            spacing: 14
+            spacing: 14 * root.scale
             clip: true
             model: root.hourlyData
             boundsBehavior: Flickable.StopAtBounds
@@ -98,7 +99,7 @@ Item {
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: (event) => {
                     if (event.angleDelta.y !== 0) {
-                        let scrollAmount = event.angleDelta.y * 1.5;
+                        let scrollAmount = event.angleDelta.y * 1.5 * root.scale;
                         listView.contentX = Math.max(0, 
                             Math.min(listView.contentX - scrollAmount, 
                                      listView.contentWidth - listView.width));
@@ -107,9 +108,9 @@ Item {
             }
 
             delegate: Rectangle {
-                width: 95
-                height: 150
-                radius: 20
+                width: 95 * root.scale
+                height: 150 * root.scale
+                radius: 20 * root.scale
                 color: hourMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
                 border.color: hourMouse.containsMouse ? root.cMauve : Qt.rgba(1, 1, 1, 0.05)
                 border.width: 1
@@ -118,12 +119,12 @@ Item {
 
                 ColumnLayout {
                     anchors.centerIn: parent
-                    spacing: 8
+                    spacing: 8 * root.scale
                     
                     Text { 
                         text: modelData.hour || "--:--"
                         font.family: root.font
-                        font.pixelSize: 11
+                        font.pixelSize: 11 * root.scale
                         color: root.cSub
                         Layout.alignment: Qt.AlignHCenter 
                     }
@@ -135,7 +136,7 @@ Item {
                             if (modelData.temp > 22) return "󰖨";
                             return "󰖐"; 
                         }
-                        font.pixelSize: 30
+                        font.pixelSize: 30 * root.scale
                         color: modelData.rain > 30 ? root.cBlue : (modelData.temp > 22 ? "#f9e2af" : root.cText)
                         Layout.alignment: Qt.AlignHCenter 
                     }
@@ -143,7 +144,7 @@ Item {
                     Text { 
                         text: Math.round(modelData.temp || 0) + "°"
                         font.family: root.font
-                        font.pixelSize: 18
+                        font.pixelSize: 18 * root.scale
                         font.bold: true
                         color: root.cText
                         Layout.alignment: Qt.AlignHCenter 
@@ -151,12 +152,12 @@ Item {
                     
                     Row {
                         Layout.alignment: Qt.AlignHCenter
-                        spacing: 4
-                        Text { text: "󰖖"; font.pixelSize: 10; color: "#94e2d5" }
+                        spacing: 4 * root.scale
+                        Text { text: "󰖖"; font.pixelSize: 10 * root.scale; color: "#94e2d5" }
                         Text { 
                             text: (modelData.rain || 0) + "%"
                             font.family: root.font
-                            font.pixelSize: 10
+                            font.pixelSize: 10 * root.scale
                                  color: root.cTeal
                         }
                     }
