@@ -5,8 +5,9 @@ import Quickshell.Io
 
 Rectangle {
     id: root
+    property real scale: 1.0
     property var currentData: null
-    color: Qt.rgba(1, 1, 1, 0.05); radius: 20; border.color: Qt.rgba(1, 1, 1, 0.1)
+    color: Qt.rgba(1, 1, 1, 0.05); radius: 20 * root.scale; border.color: Qt.rgba(1, 1, 1, 0.1)
     
     readonly property string font: "JetBrains Mono Nerd Font"
     property color cBlue: "#89b4fa"
@@ -41,8 +42,8 @@ Rectangle {
     Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
 
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 20; spacing: 20
-        Text { text: "DETALLES"; font.family: root.font; font.pixelSize: 14; font.bold: true; color: root.cGreen }
+        anchors.fill: parent; anchors.margins: 20 * root.scale; spacing: 20 * root.scale
+        Text { text: "DETALLES"; font.family: root.font; font.pixelSize: 14 * root.scale; font.bold: true; color: root.cGreen }
 
         Repeater {
             model: [
@@ -53,15 +54,15 @@ Rectangle {
             ]
 
             delegate: RowLayout {
-                Layout.fillWidth: true; spacing: 15
+                Layout.fillWidth: true; spacing: 15 * root.scale
 
                 Rectangle {
-                    width: 40; height: 40; radius: 10
+                    width: 40 * root.scale; height: 40 * root.scale; radius: 10 * root.scale
                     color: Qt.rgba(1, 1, 1, 0.05)
                     Text {
                         anchors.centerIn: parent
                         text: modelData.icon
-                        font.pixelSize: 18
+                        font.pixelSize: 18 * root.scale
                         color: modelData.color
                     }
                 }
@@ -71,13 +72,13 @@ Rectangle {
                     Text {
                         text: modelData.label
                         font.family: root.font
-                        font.pixelSize: 11
+                        font.pixelSize: 11 * root.scale
                         color: root.cSub
                     }
                     Text {
                         text: modelData.value
                         font.family: root.font
-                        font.pixelSize: 14
+                        font.pixelSize: 14 * root.scale
                         font.bold: true
                         color: root.cText
                     }

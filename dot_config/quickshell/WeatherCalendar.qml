@@ -9,11 +9,12 @@ import QtQuick.Controls
  */
 Rectangle {
     id: root
+    property real scale: 1.0
     property string selectedDate: ""
     property string todayDate: ""
     signal dateSelected(string date)
     
-    radius: 30
+    radius: 30 * root.scale
     color: Qt.rgba(1, 1, 1, 0.03)
     border.color: Qt.rgba(1, 1, 1, 0.05)
     
@@ -27,26 +28,26 @@ Rectangle {
     
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 20
-        spacing: 15
+        anchors.margins: 20 * root.scale
+        spacing: 15 * root.scale
         
         // Header
         RowLayout {
             Layout.fillWidth: true
             Text {
                 text: root.monthNames[root.displayDate.getMonth()] + " " + root.displayDate.getFullYear()
-                font.family: root.font; font.pixelSize: 16; font.bold: true; color: root.accentColor
+                font.family: root.font; font.pixelSize: 16 * root.scale; font.bold: true; color: root.accentColor
             }
             Item { Layout.fillWidth: true }
             Row {
-                spacing: 8
+                spacing: 8 * root.scale
                 Rectangle {
-                    width: 30; height: 30; radius: 10; color: Qt.rgba(1,1,1,0.05)
+                    width: 30 * root.scale; height: 30 * root.scale; radius: 10 * root.scale; color: Qt.rgba(1,1,1,0.05)
                     Text { anchors.centerIn: parent; text: "󰁍"; color: root.textColor; rotation: 180 }
                     MouseArea { anchors.fill: parent; onClicked: root.displayDate = new Date(root.displayDate.getFullYear(), root.displayDate.getMonth() - 1, 1) }
                 }
                 Rectangle {
-                    width: 30; height: 30; radius: 10; color: Qt.rgba(1,1,1,0.05)
+                    width: 30 * root.scale; height: 30 * root.scale; radius: 10 * root.scale; color: Qt.rgba(1,1,1,0.05)
                     Text { anchors.centerIn: parent; text: "󰁍"; color: root.textColor }
                     MouseArea { anchors.fill: parent; onClicked: root.displayDate = new Date(root.displayDate.getFullYear(), root.displayDate.getMonth() + 1, 1) }
                 }
@@ -56,13 +57,13 @@ Rectangle {
         // Grid
         GridLayout {
             columns: 7; Layout.fillWidth: true; Layout.fillHeight: true
-            rowSpacing: 2; columnSpacing: 2
+            rowSpacing: 2 * root.scale; columnSpacing: 2 * root.scale
             
             Repeater {
                 model: ["D", "L", "M", "M", "J", "V", "S"]
                 Text {
                     Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter
-                    text: modelData; font.family: root.font; font.pixelSize: 10; font.bold: true; color: root.accentColor; opacity: 0.5
+                    text: modelData; font.family: root.font; font.pixelSize: 10 * root.scale; font.bold: true; color: root.accentColor; opacity: 0.5
                 }
             }
             
@@ -70,7 +71,7 @@ Rectangle {
                 id: daysRepeater
                 model: 42
                 delegate: Rectangle {
-                    Layout.fillWidth: true; Layout.preferredHeight: 32; radius: 10
+                    Layout.fillWidth: true; Layout.preferredHeight: 32 * root.scale; radius: 10 * root.scale
                     
                     property date dateValue: {
                         var firstDay = new Date(root.displayDate.getFullYear(), root.displayDate.getMonth(), 1).getDay()
@@ -89,7 +90,7 @@ Rectangle {
                     Text {
                         anchors.centerIn: parent
                         text: dateValue.getDate()
-                        font.family: root.font; font.pixelSize: 12; font.bold: isSelected || isToday
+                        font.family: root.font; font.pixelSize: 12 * root.scale; font.bold: isSelected || isToday
                         color: isSelected ? "#11111b" : root.textColor
                     }
                     
