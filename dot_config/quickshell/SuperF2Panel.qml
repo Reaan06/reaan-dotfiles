@@ -85,7 +85,7 @@ Item {
         PanelConnector {
             Layout.fillWidth: true
             color: root.cBg
-            barWidth: root.anchorWidth * root.scale
+            barWidth: root.anchorWidth
             neckOffset: root.neckOffset
         }
 
