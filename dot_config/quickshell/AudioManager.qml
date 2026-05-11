@@ -71,6 +71,35 @@ Item {
     property var appsList: []
     property bool draggingVol: false
 
+    onActiveChanged: {
+        if (active) {
+            mProc.command = ["sh", "-c", "~/.config/scripts/eq-control.sh start"]; mProc.running = true
+            loadEqState();
+        }
+    }
+
+    function loadEqState() {
+        eqLoaderProc.running = true
+    }
+
+    Process {
+        id: eqLoaderProc
+        command: ["sh", "-c", "for i in {0..9}; do cat ${XDG_RUNTIME_DIR:-/tmp}/qs-eq/band-$i 2>/dev/null || echo '0.0'; done; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-eq/preset 2>/dev/null || echo 'Flat'"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = text.trim().split("\n")
+                if (lines.length >= 11) {
+                    var nb = []
+                    for (var i = 0; i < 10; i++) {
+                        nb.push(parseFloat(lines[i]) || 0.0)
+                    }
+                    root.eqBands = nb
+                    root.activePreset = lines[10] || "Flat"
+                }
+            }
+        }
+    }
+
     // ── DATA SYNC ──
     Process {
         id: mprisProc; command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-mpris 2>/dev/null"]
@@ -121,13 +150,13 @@ Item {
     function setPreset(p) { 
         root.activePreset = p; mProc.command = ["sh", "-c", "~/.config/scripts/eq-control.sh set-preset " + p]; mProc.running = true
         var nb = [0,0,0,0,0,0,0,0,0,0]
-        if (p === "Bass") nb = [10, 8, 6, 3, 1, 0, -1, -2, -3, -4]
-        else if (p === "Treble") nb = [-4, -3, -2, -1, 0, 2, 5, 8, 10, 12]
-        else if (p === "Rock") nb = [8, 6, 4, -1, -3, -1, 3, 5, 7, 8]
-        else if (p === "Pop") nb = [-2, -1, 2, 5, 7, 6, 3, 1, -1, -2]
-        else if (p === "Jazz") nb = [6, 4, 2, 4, -1, -1, 2, 4, 5, 6]
-        else if (p === "Vocal") nb = [-4, -2, 0, 2, 5, 6, 5, 2, 0, -2]
-        else if (p === "Classic") nb = [5, 4, 3, 2, 0, 0, -2, -3, -4, -5]
+        if (p === "Bass") nb = [12, 10, 7, 3, 0, 0, 0, 0, 0, 0]
+        else if (p === "Treble") nb = [0, 0, 0, 0, 0, 0, 3, 7, 10, 12]
+        else if (p === "Rock") nb = [8, 5, -2, -5, -7, -4, 3, 6, 8, 11]
+        else if (p === "Pop") nb = [-2, 2, 5, 7, 4, -2, -3, -3, -2, -2]
+        else if (p === "Jazz") nb = [4, 3, 1, 3, -3, -3, 0, 2, 4, 5]
+        else if (p === "Vocal") nb = [-6, -3, 0, 4, 10, 12, 9, 4, 0, -4]
+        else if (p === "Classic") nb = [6, 5, 4, 2, -3, -3, 0, 3, 5, 6]
         root.eqBands = nb
     }
     Process { id: mProc }
@@ -217,6 +246,17 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Text { text: root.showAppVol ? "App Volumes" : "Equalizer"; font.family: root.font; font.pixelSize: 18 * root.scale; font.bold: true; color: root.cMauve }
+                    
+                    // Route Audio Button
+                    Rectangle {
+                        width: 32 * root.scale; height: 32 * root.scale; radius: 16 * root.scale; color: Qt.rgba(1,1,1,0.08); visible: !root.showAppVol
+                        Text { anchors.centerIn: parent; text: "󰓃"; font.family: root.font; font.pixelSize: 18 * root.scale; color: root.cBlue }
+                        MouseArea { 
+                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: { mProc.command = ["sh", "-c", "~/.config/scripts/eq-control.sh route"]; mProc.running = true }
+                        }
+                    }
+
                     Item { Layout.fillWidth: true }
                     
                     Row {
