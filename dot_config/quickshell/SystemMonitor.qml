@@ -133,15 +133,33 @@ Rectangle {
     }
 
     component CircularGauge: Item {
+        id: gaugeRoot
         property real fillVal: 0
         property color fillCol: "white"
+        property real strokeWidth: 12 * root.scale
         width: 130 * root.scale; height: 130 * root.scale
         Shape {
             anchors.fill: parent; layer.enabled: true; layer.samples: 4
-            ShapePath { strokeColor: Qt.rgba(1,1,1,0.05); strokeWidth: 12 * root.scale; fillColor: "transparent"; capStyle: ShapePath.RoundCap; PathAngleArc { centerX: 65 * root.scale; centerY: 65 * root.scale; radiusX: 55 * root.scale; radiusY: 55 * root.scale; startAngle: -90; sweepAngle: 360 } }
-            ShapePath { strokeColor: fillCol; strokeWidth: 12 * root.scale; fillColor: "transparent"; capStyle: ShapePath.RoundCap; PathAngleArc { centerX: 65 * root.scale; centerY: 65 * root.scale; radiusX: 55 * root.scale; radiusY: 55 * root.scale; startAngle: -90; sweepAngle: Math.max(0.1, (fillVal / 100) * 360) } }
+            ShapePath {
+                strokeColor: Qt.rgba(1,1,1,0.05); strokeWidth: gaugeRoot.strokeWidth; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                PathAngleArc {
+                    centerX: gaugeRoot.width / 2; centerY: gaugeRoot.height / 2
+                    radiusX: (gaugeRoot.width - gaugeRoot.strokeWidth) / 2
+                    radiusY: (gaugeRoot.height - gaugeRoot.strokeWidth) / 2
+                    startAngle: -90; sweepAngle: 360
+                }
+            }
+            ShapePath {
+                strokeColor: fillCol; strokeWidth: gaugeRoot.strokeWidth; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                PathAngleArc {
+                    centerX: gaugeRoot.width / 2; centerY: gaugeRoot.height / 2
+                    radiusX: (gaugeRoot.width - gaugeRoot.strokeWidth) / 2
+                    radiusY: (gaugeRoot.height - gaugeRoot.strokeWidth) / 2
+                    startAngle: -90; sweepAngle: Math.max(0.1, (fillVal / 100) * 360)
+                }
+            }
         }
-        Text { anchors.centerIn: parent; text: Math.round(fillVal) + "%"; color: root.cText; font.pixelSize: 20 * root.scale; font.bold: true; font.family: root.font }
+        Text { anchors.centerIn: gaugeRoot; text: Math.round(fillVal) + "%"; color: root.cText; font.pixelSize: 20 * root.scale; font.bold: true; font.family: root.font }
     }
 
     ColumnLayout {
