@@ -87,42 +87,45 @@ Rectangle {
     }
     Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: { statsProc.running = false; statsProc.running = true } }
 
-    property bool tempWarningSent: false
-    property bool tempCriticalSent: false
+    property real lastNotifyTemp: 0
+    property double lastNotifyTime: 0
 
     Process {
         id: notifyProc
         property string msg: ""
         property string icon: ""
         property string urgency: "normal"
-        command: ["sh", "-c", "notify-send -u " + urgency + " -i " + icon + " 'Alerta de Temperatura' '" + msg + "'"]
+        command: ["sh", "-c", "notify-send -h string:x-canonical-private-synchronous:temp-alert -u " + urgency + " -i " + icon + " 'Alerta de Temperatura' '" + msg + "'"]
     }
 
     function checkTemps(cpuTemp, gpuTemp) {
-        var maxTemp = Math.max(cpuTemp, gpuTemp);
-        if (maxTemp >= 90) {
-            if (!tempCriticalSent) {
-                notifyProc.msg = "Temperatura CRÍTICA (" + maxTemp + "°C). El sistema se está sobrecalentando severamente.";
-                notifyProc.icon = "dialog-error";
-                notifyProc.urgency = "critical";
+        var maxTemp = Math.round(Math.max(cpuTemp, gpuTemp));
+        var currentTime = Date.now();
+        
+        if (maxTemp >= 80) {
+            // Si la temperatura cambió respecto a la última notificación o han pasado 5 segundos
+            if (maxTemp !== lastNotifyTemp && (currentTime - lastNotifyTime) >= 5000) {
+                var isCritical = (maxTemp >= 90);
+                
+                notifyProc.msg = isCritical 
+                    ? "Temperatura CRÍTICA (" + maxTemp + "°C). El sistema se está sobrecalentando severamente."
+                    : "Temperatura alta (" + maxTemp + "°C). El sistema se está calentando.";
+                
+                notifyProc.icon = isCritical ? "dialog-error" : "dialog-warning";
+                notifyProc.urgency = isCritical ? "critical" : "normal";
+                
                 notifyProc.running = false;
                 notifyProc.running = true;
-                tempCriticalSent = true;
-                tempWarningSent = true;
+                
+                lastNotifyTemp = maxTemp;
+                lastNotifyTime = currentTime;
             }
-        } else if (maxTemp >= 80) {
-            if (!tempWarningSent) {
-                notifyProc.msg = "Temperatura alta (" + maxTemp + "°C). El sistema se está calentando.";
-                notifyProc.icon = "dialog-warning";
-                notifyProc.urgency = "normal";
-                notifyProc.running = false;
-                notifyProc.running = true;
-                tempWarningSent = true;
-            }
-            tempCriticalSent = false;
         } else {
-            tempWarningSent = false;
-            tempCriticalSent = false;
+            // Si la temperatura baja del umbral, reseteamos para permitir nuevas alertas si vuelve a subir
+            if (lastNotifyTemp !== 0) {
+                lastNotifyTemp = 0;
+                lastNotifyTime = 0;
+            }
         }
     }
 
