@@ -1,56 +1,51 @@
-configuration {
-    modi:                       "drun,run,filebrowser,window";
-    show-icons:                 true;
-    display-drun:               " Apps";
-    display-run:                " Run";
-    display-filebrowser:        " Files";
-    display-window:             " Windows";
-    drun-display-format:        "{name}";
-    hover-select:               true;
-    scroll-method:              1;
-}
-
 * {
-    font:                       "JetBrainsMono Nerd Font 10";
-    background:                 rgba(30, 30, 46, 0.85);
-    background-alt:             rgba(49, 50, 68, 0.7);
-    foreground:                 #CDD6F4;
-    selected:                   #89B4FA;
-    active:                     #A6E3A1;
-    urgent:                     #F38BA8;
+    background:     #1E1E2E;
+    background-alt: #313244;
+    foreground:     #CDD6F4;
+    accent:         #CBA6F7;
+    selected:       #89B4FA;
+    urgent:         #F38BA8;
+    
+    width: 800;
 }
 
 window {
     transparency:                "real";
-    location:                    south;
-    anchor:                      south;
+    location:                    center;
+    anchor:                      center;
     fullscreen:                  false;
-    width:                       100%;
-    height:                      40%;
+    width:                       800px;
     x-offset:                    0px;
     y-offset:                    0px;
+
     enabled:                     true;
-    border-radius:               20px 20px 0px 0px;
-    border:                      2px 0px 0px 0px;
-    border-color:                @selected;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      2px 2px 2px 2px;
+    border-radius:               24px;
+    border-color:                @accent;
     background-color:            @background;
     cursor:                      "default";
 }
 
 mainbox {
     enabled:                     true;
-    spacing:                     20px;
-    padding:                     30px;
+    spacing:                     0px;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px 0px 0px 0px;
+    border-color:                @accent;
     background-color:            transparent;
-    children:                    [ "inputbar", "listview" ];
+    children:                    [ "inputbar", "mode-switcher", "listview" ];
 }
 
 inputbar {
     enabled:                     true;
     spacing:                     10px;
-    margin:                      0px 20% 0px 20%;
-    padding:                     12px;
-    border-radius:               12px;
+    margin:                      20px;
+    padding:                     15px;
+    border-radius:               15px;
     background-color:            @background-alt;
     text-color:                  @foreground;
     children:                    [ "prompt", "entry" ];
@@ -67,14 +62,35 @@ entry {
     background-color:            transparent;
     text-color:                  inherit;
     cursor:                      text;
-    placeholder:                 "Buscar aplicaciones...";
+    placeholder:                 "Buscar...";
     placeholder-color:           inherit;
+}
+
+mode-switcher{
+    enabled:                     true;
+    spacing:                     10px;
+    margin:                      0px 20px 10px 20px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+
+button {
+    padding:                     10px;
+    border-radius:               10px;
+    background-color:            @background-alt;
+    text-color:                  inherit;
+    cursor:                      pointer;
+}
+
+button selected {
+    background-color:            @accent;
+    text-color:                  @background;
 }
 
 listview {
     enabled:                     true;
     columns:                     6;
-    lines:                       3;
+    lines:                       2;
     cycle:                       true;
     dynamic:                     true;
     scrollbar:                   false;
@@ -82,18 +98,18 @@ listview {
     reverse:                     false;
     fixed-height:                true;
     fixed-columns:               true;
-    spacing:                     20px;
-    margin:                      0px;
+    
+    spacing:                     15px;
+    margin:                      10px 20px 20px 20px;
     background-color:            transparent;
     text-color:                  @foreground;
-    cursor:                      "default";
 }
 
 element {
     enabled:                     true;
     spacing:                     10px;
     padding:                     15px;
-    border-radius:               15px;
+    border-radius:               20px;
     background-color:            transparent;
     text-color:                  @foreground;
     orientation:                 vertical;
@@ -102,19 +118,18 @@ element {
 
 element selected.normal {
     background-color:            @selected;
-    text-color:                  #1E1E2E;
+    text-color:                  @background;
 }
 
 element-icon {
     background-color:            transparent;
-    text-color:                  inherit;
-    size:                        48px;
+    size:                        64px;
     cursor:                      inherit;
 }
 
 element-text {
     background-color:            transparent;
     text-color:                  inherit;
-    vertical-align:              0.5;
     horizontal-align:            0.5;
+    vertical-align:              0.5;
 }
