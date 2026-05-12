@@ -1,12 +1,12 @@
 * {
-    background:     #1E1E2E;
-    background-alt: #313244;
+    background:     rgba(30, 30, 46, 0.95);
+    background-alt: rgba(49, 50, 68, 0.7);
     foreground:     #CDD6F4;
     accent:         #CBA6F7;
     selected:       #89B4FA;
     urgent:         #F38BA8;
     
-    width: 800;
+    width: 640;
 }
 
 window {
@@ -14,7 +14,8 @@ window {
     location:                    center;
     anchor:                      center;
     fullscreen:                  false;
-    width:                       800px;
+    width:                       640px;
+    height:                      800px;
     x-offset:                    0px;
     y-offset:                    0px;
 
@@ -89,8 +90,8 @@ button selected {
 
 listview {
     enabled:                     true;
-    columns:                     6;
-    lines:                       2;
+    columns:                     4;
+    lines:                       8;
     cycle:                       true;
     dynamic:                     true;
     scrollbar:                   false;
