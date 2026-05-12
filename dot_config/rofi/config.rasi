@@ -1,12 +1,11 @@
 // --- Rofi Configuration ---
 configuration {
-    modi: "drun,run,window,ssh";
+    modi: "drun,run,window";
     show-icons: true;
     icon-theme: "Papirus-Dark";
-    display-drun: "  Apps";
-    display-run: "  Run";
-    display-window: "  Windows";
-    display-ssh: "  SSH";
+    display-drun: "APPS";
+    display-run: "RUN";
+    display-window: "WIN";
     drun-display-format: "{name}";
     window-format: "{w} · {c} · {t}";
     font: "JetBrainsMono Nerd Font 11";
@@ -22,7 +21,7 @@ configuration {
     location: 0;
     fixed-num-lines: true;
     hide-scrollbar: true;
-    sidebar-mode: false;
+    sidebar-mode: true;
     
     // Performance
     lazy-grab: false;
