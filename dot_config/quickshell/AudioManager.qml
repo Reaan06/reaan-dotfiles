@@ -10,7 +10,7 @@ Item {
 
     property bool active: false
     property real neckOffset: 0
-    property real anchorWidth: 200
+    property real anchorWidth: 250
     property real scale: 1.0
     readonly property string font: "JetBrains Mono Nerd Font"
     
@@ -180,9 +180,9 @@ Item {
             ColumnLayout {
                 anchors.fill: parent; anchors.margins: 32 * root.scale; spacing: 20 * root.scale
                 RowLayout {
-                    Layout.fillWidth: true; spacing: 28 * root.scale; Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true; spacing: 32 * root.scale; Layout.alignment: Qt.AlignHCenter
                     Item {
-                        width: 140 * root.scale; height: 140 * root.scale
+                        width: 190 * root.scale; height: 190 * root.scale
                         Rectangle { anchors.fill: parent; radius: width / 2; color: "transparent"; border.color: root.cMauve; border.width: 2 * root.scale; opacity: 0.15; scale: 1.15 }
                         Item {
                             id: vinyl; anchors.fill: parent
