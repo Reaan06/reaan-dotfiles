@@ -5,6 +5,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import Quickshell.Services.Mpris
 import Quickshell.Services.SystemTray
+import Qt5Compat.GraphicalEffects
 import "components"
 
 Item {
@@ -337,12 +338,35 @@ Item {
         // ──────── 1. LOGO DISTRO (color fijo) ────────
         Pill {
             pillColor: root.cPill; hoverColor: root.cHover
-            hPad: 18; vPad: 14
+            hPad: 14; vPad: 10
             onClicked: aRofi.running = true
-            Text {
-                text: "\uf17c"
-                font.family: root.font; font.pixelSize: 24
-                color: "#ffffff"
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6 * root.scale
+                Text {
+                    id: linuxLogo
+                    text: ""
+                    font.family: root.font; font.pixelSize: 24
+                    color: "#ffffff"
+                    anchors.verticalCenter: parent.verticalCenter
+                    layer.enabled: true
+                    layer.effect: DropShadow { color: "#40000000"; radius: 4; samples: 9 }
+                }
+                Text {
+                    text: "/"
+                    font.family: root.font; font.pixelSize: 24
+                    color: "#ffffff"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    id: gnuLogo
+                    text: ""
+                    font.family: root.font; font.pixelSize: 30
+                    color: "#ffffff"
+                    anchors.verticalCenter: parent.verticalCenter
+                    layer.enabled: true
+                    layer.effect: DropShadow { color: "#40000000"; radius: 4; samples: 9 }
+                }
             }
         }
 
