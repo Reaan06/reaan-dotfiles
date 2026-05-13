@@ -1,16 +1,13 @@
 configuration {
-    modi: "drun,run,window";
+    modi: "drun,Desarrollo:~/.config/rofi/scripts/category.sh Development,Juegos:~/.config/rofi/scripts/category.sh Game,Musica:~/.config/rofi/scripts/category.sh AudioVideo,Sistema:~/.config/rofi/scripts/category.sh System,window";
     show-icons: true;
-    display-drun: "APPS";
-    display-run: "RUN";
-    display-window: "WIN";
-    drun-display-format: "{name}";
-    font: "JetBrainsMono Nerd Font 11";
+    display-drun: "Apps";
+    display-Desarrollo: "Desarrollo";
+    display-Juegos: "Juegos";
+    display-Musica: "Música";
+    display-Sistema: "Sistema";
+    display-window: "Ventanas";
     sidebar-mode: true;
-    terminal: "kitty";
-    matching: "fuzzy";
-    
-    kb-mode-next: "Shift+Right,Control+Tab";
-    kb-mode-previous: "Shift+Left,Control+Shift+Tab";
 }
+
 @theme "theme.rasi"
