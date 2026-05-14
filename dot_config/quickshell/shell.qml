@@ -12,41 +12,40 @@ ShellRoot {
     // Almacena las coordenadas locales de los módulos (respecto a la barra) por monitor.
     property var anchors: ({})
 
-    // ── Global state for AudioManager & Super F2 ──
+    // ── Global state for AudioManager, Super F2 & Bluetooth ──
     property bool audioManagerVisible: false
     property string audioManagerMonitor: ""
     property bool superF2Visible: false
     property string superF2Monitor: ""
+    property bool btVisible: false
+    property string btMonitor: ""
     property bool amAnimating: false
     property bool f2Animating: false
+    property bool btAnimating: false
     property string _lastAmState: ""
     property string _lastF2State: ""
+    property string _lastBtState: ""
 
     Process {
         id: amStateProc
-        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null"]
+        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var parts = text.trim().split("---")
-                if (parts.length < 2) return
+                if (parts.length < 3) return
                 
                 var amRawFull = parts[0].trim()
                 var f2RawFull = parts[1].trim()
+                var btRawFull = parts[2].trim()
 
                 if (amRawFull !== _lastAmState) {
                     _lastAmState = amRawFull
                     var amParts = amRawFull.split(" ")
                     var amRaw = amParts[0]
                     audioManagerMonitor = amParts.length > 1 ? amParts[1] : ""
-
                     var newVal = (amRaw === "visible")
-                    if (!newVal && audioManagerVisible) {
-                        amAnimating = true
-                        amHideTimer.start()
-                    } else if (newVal) {
-                        amAnimating = false
-                        amHideTimer.stop()
-                    }
+                    if (!newVal && audioManagerVisible) { amAnimating = true; amHideTimer.start() }
+                    else if (newVal) { amAnimating = false; amHideTimer.stop() }
                     audioManagerVisible = newVal
                 }
                 if (f2RawFull !== _lastF2State) {
@@ -54,16 +53,20 @@ ShellRoot {
                     var f2Parts = f2RawFull.split(" ")
                     var f2Raw = f2Parts[0]
                     superF2Monitor = f2Parts.length > 1 ? f2Parts[1] : ""
-
                     var newValF2 = (f2Raw === "visible")
-                    if (!newValF2 && superF2Visible) {
-                        f2Animating = true
-                        f2HideTimer.start()
-                    } else if (newValF2) {
-                        f2Animating = false
-                        f2HideTimer.stop()
-                    }
+                    if (!newValF2 && superF2Visible) { f2Animating = true; f2HideTimer.start() }
+                    else if (newValF2) { f2Animating = false; f2HideTimer.stop() }
                     superF2Visible = newValF2
+                }
+                if (btRawFull !== _lastBtState) {
+                    _lastBtState = btRawFull
+                    var btParts = btRawFull.split(" ")
+                    var btRaw = btParts[0]
+                    btMonitor = btParts.length > 1 ? btParts[1] : ""
+                    var newValBt = (btRaw === "visible")
+                    if (!newValBt && btVisible) { btAnimating = true; btHideTimer.start() }
+                    else if (newValBt) { btAnimating = false; btHideTimer.stop() }
+                    btVisible = newValBt
                 }
             }
         }
@@ -72,6 +75,7 @@ ShellRoot {
 
     Timer { id: amHideTimer; interval: 400; onTriggered: amAnimating = false }
     Timer { id: f2HideTimer; interval: 400; onTriggered: f2Animating = false }
+    Timer { id: btHideTimer; interval: 400; onTriggered: btAnimating = false }
 
     // ── Global: start MPRIS follow daemon (once, not per-monitor) ──
     Process {
@@ -182,6 +186,37 @@ ShellRoot {
                 // El conector se desplaza dinámicamente para unirse al reloj
                 neckOffset: worldClockX - (superF2Win.x + superF2Win.width / 2)
                 scale: Math.max(0.65, Math.min(parent.width / 1624, parent.height / 800))
+            }
+        }
+    }
+
+    // ── Bluetooth Panel popup (Network Manager, right side) ──
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            id: btWin
+            property var modelData
+            screen: modelData
+            visible: (btVisible || btAnimating) && screen.name === btMonitor
+            
+            // Posicionamiento lateral derecho
+            anchors.top: true; anchors.bottom: true; anchors.right: true
+            
+            margins {
+                top: 60
+                bottom: 60
+                right: 40
+            }
+
+            // Ancho masivo (~48% del monitor, casi la mitad)
+            implicitWidth: Math.max(850, screen.width * 0.48)
+            
+            exclusionMode: ExclusionMode.Ignore; color: "transparent"
+
+            BluetoothPanel {
+                anchors.fill: parent
+                active: btVisible
+                scale: 1.15 // Bajamos escala para que el layout nativo maneje el espacio extra
             }
         }
     }
