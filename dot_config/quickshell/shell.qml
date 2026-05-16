@@ -277,7 +277,7 @@ ShellRoot {
             
             anchors.bottom: true
             anchors.left: true
-            focusable: true
+            focusable: dm.launcherOpen
             
             // Centrado dinámico basado en el ancho real
             margins.left: (screen.width - implicitWidth) / 2
