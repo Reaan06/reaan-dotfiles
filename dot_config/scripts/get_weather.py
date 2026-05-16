@@ -1,32 +1,36 @@
 import requests
 import json
 import os
+import subprocess
 from datetime import datetime, timedelta
 
 # Persistent storage for weather telemetry
 CACHE_PATH = os.path.expanduser("~/.cache/weather.json")
 
+def get_location():
+    """Attempt to get precise location using multiple strategies."""
+    # Strategy 1: Multi-provider IP Geolocation fallback
+    providers = [
+        'https://ipapi.co/json/',
+        'http://ip-api.com/json/',
+        'https://freegeoip.app/json/'
+    ]
+    
+    for url in providers:
+        try:
+            resp = requests.get(url, timeout=3).json()
+            if 'latitude' in resp:
+                return resp['city'], resp['latitude'], resp['longitude']
+            elif 'lat' in resp:
+                return resp['city'], resp['lat'], resp['lon']
+        except:
+            continue
+    
+    return "Desconocido", 19.4326, -99.1332 # Default to CDMX
+
 def get_weather():
     try:
-        # Multi-service IP Geolocation with automatic fallback
-        city = "Unknown"
-        lat, lon = 19.4326, -99.1332 # Hard default CDMX coords but city name is dynamic
-
-        # Priority 1: ipapi.co
-        try:
-            loc = requests.get('https://ipapi.co/json/', timeout=4).json()
-            if 'city' in loc:
-                city = loc['city']
-                lat, lon = loc['latitude'], loc['longitude']
-        except:
-            # Priority 2: ip-api.com
-            try:
-                loc = requests.get('http://ip-api.com/json/', timeout=4).json()
-                if loc.get('status') == 'success':
-                    city = loc['city']
-                    lat, lon = loc['lat'], loc['lon']
-            except:
-                pass
+        city, lat, lon = get_location()
 
         # Load historical cache
         archive = {"city": city, "days": {}}
@@ -34,13 +38,11 @@ def get_weather():
             try:
                 with open(CACHE_PATH, 'r') as f:
                     archive = json.load(f)
-                # If city detection was better in previous run, keep it unless new one is found
-                if city == "Unknown" and archive.get("city"):
-                    city = archive["city"]
             except:
                 pass
 
         # Fetch APIs (Forecast + Archive)
+        # Open-Meteo is free and doesn't require a key
         forecast_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m&timezone=auto&forecast_days=8"
         f_resp = requests.get(forecast_url, timeout=7).json()
 
@@ -59,7 +61,6 @@ def get_weather():
                 if d_key not in archive['days']: archive['days'][d_key] = []
                 
                 # Upsert hour
-                existing = next((x for x in archive['days'][d_key] if x['hour'] == h_key), None)
                 entry = {
                     "hour": h_key,
                     "temp": h['temperature_2m'][i],
@@ -68,16 +69,32 @@ def get_weather():
                     "wind": h['wind_speed_10m'][i],
                     "code": h['weather_code'][i]
                 }
-                if existing: existing.update(entry)
-                else: archive['days'][d_key].append(entry)
+                
+                # Check if entry exists to update or append
+                found = False
+                for existing in archive['days'][d_key]:
+                    if existing['hour'] == h_key:
+                        existing.update(entry)
+                        found = True
+                        break
+                if not found:
+                    archive['days'][d_key].append(entry)
             
-            for d in archive['days']: archive['days'][d].sort(key=lambda x: x['hour'])
+            # Sort days
+            for d in archive['days']:
+                archive['days'][d].sort(key=lambda x: x['hour'])
 
         ingest(h_resp)
         ingest(f_resp)
 
+        # Cleanup old data (keep only 14 days)
+        cutoff = datetime.now() - timedelta(days=14)
+        archive['days'] = {k: v for k, v in archive['days'].items() if datetime.strptime(k, '%Y-%m-%d') > cutoff}
+
         archive.update({
-            "city": city if city != "Unknown" else archive.get("city", "Desconocido"),
+            "city": city,
+            "lat": lat,
+            "lon": lon,
             "current_time": datetime.now().strftime("%H:%M"),
             "current_date": datetime.now().strftime("%Y-%m-%d")
         })
@@ -90,7 +107,11 @@ def get_weather():
     except Exception as e:
         if os.path.exists(CACHE_PATH):
             with open(CACHE_PATH, 'r') as f: print(f.read())
-        else: print(json.dumps({"error": str(e)}))
+        else:
+            print(json.dumps({"error": str(e), "city": "Error", "days": {}}))
+
+if __name__ == "__main__":
+    get_weather()
 
 if __name__ == "__main__":
     get_weather()

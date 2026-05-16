@@ -14,6 +14,7 @@ Item {
     property color cText:    "#cdd6f4"
     property color cSub:     "#6c7086"
     property string font:    "JetBrains Mono Nerd Font"
+    property color cSurface: Qt.rgba(1, 1, 1, 0.05)
 
     property bool connected: false
     property string ssid: ""
@@ -21,7 +22,6 @@ Item {
     property string security: ""
     property string mac: ""
     property string localIp: ""
-    property string publicIp: ""
 
     // Búsqueda y Selección
     property bool isSearching: false
@@ -30,35 +30,35 @@ Item {
     property string password: ""
     property bool showingAuth: false
 
+    property string statusText: "WIFI"
+    property string subStatusText: "Pulsa para buscar"
+
     Process {
         id: infoProc
         command: ["sh", "-c", "~/.config/scripts/network-manager.sh info"]
         stdout: StdioCollector {
             onStreamFinished: (text) => {
-                var parts = text.trim().split("|")
-                if (parts[0] === "connected") {
-                    root.connected = true
-                    root.ssid = parts[1] || "Unknown"
-                    root.signal = parts[2] || "0"
-                    root.security = parts[3] || "None"
-                    root.mac = parts[4] || "N/A"
-                } else {
-                    root.connected = false
-                }
+                try {
+                    var data = JSON.parse(text.trim())
+                    if (data.status === "connected") {
+                        root.connected = true
+                        root.ssid = data.ssid
+                        root.signal = data.signal.toString()
+                        root.security = data.security
+                        root.mac = data.mac
+                        root.localIp = data.local_ip
+                        root.statusText = data.ssid
+                        root.subStatusText = "Conectado"
+                    } else {
+                        root.connected = false
+                        if (!root.isSearching) {
+                            root.statusText = "WIFI"
+                            root.subStatusText = "Pulsa para buscar"
+                        }
+                    }
+                } catch(e) { root.connected = false }
             }
         }
-    }
-
-    Process {
-        id: ipLocalProc
-        command: ["sh", "-c", "~/.config/scripts/network-manager.sh ip_local"]
-        stdout: StdioCollector { onStreamFinished: (text) => root.localIp = text.trim() }
-    }
-
-    Process {
-        id: ipPublicProc
-        command: ["sh", "-c", "~/.config/scripts/network-manager.sh ip_public"]
-        stdout: StdioCollector { onStreamFinished: (text) => root.publicIp = text.trim() }
     }
 
     Process {
@@ -66,17 +66,25 @@ Item {
         command: ["sh", "-c", "~/.config/scripts/network-manager.sh scan"]
         stdout: StdioCollector {
             onStreamFinished: (text) => {
-                var lines = text.trim().split("\n")
-                var results = []
-                for (var i = 0; i < lines.length; i++) {
-                    if (lines[i]) {
-                        var p = lines[i].split(":")
-                        if (p.length >= 2) {
-                            results.push({ssid: p[0], signal: p[1], security: p[2] || ""})
-                        }
+                try {
+                    var cleanText = text.trim()
+                    // Fix potential trailing commas or malformed JSON from bash
+                    if (cleanText.endsWith(",]")) cleanText = cleanText.replace(",]", "]")
+                    
+                    var data = JSON.parse(cleanText)
+                    root.scanResults = data
+                    
+                    if (data.length === 0) {
+                        root.statusText = "WIFI"
+                        root.subStatusText = "No se encontraron redes"
+                    } else {
+                        root.statusText = "RESULTADOS"
+                        root.subStatusText = data.length + " redes encontradas"
                     }
+                } catch(e) { 
+                    console.log("Error parseando WiFi:", e)
+                    root.subStatusText = "Error en el escaneo"
                 }
-                root.scanResults = results
                 root.isSearching = false
             }
         }
@@ -84,35 +92,38 @@ Item {
 
     Process { id: connectProc }
 
-    Timer { interval: 3000; running: !root.isSearching; repeat: true; triggeredOnStart: true; onTriggered: infoProc.running = true }
+    Timer { interval: 5000; running: !root.isSearching; repeat: true; triggeredOnStart: true; onTriggered: infoProc.running = true }
 
-    // Grafo
+    property real animTime: 0
+    Timer { 
+        id: animTimer
+        interval: 16; running: root.isSearching || (!root.connected && root.scanResults.length > 0); repeat: true 
+        onTriggered: root.animTime += 0.016 
+    }
+
+    // ── VISTA: Grafo de Radar ──
     GraphCanvas {
+        id: canvas
         anchors.fill: parent
         centerX: width / 2; centerY: height / 2
         nodes: {
             if (root.showingAuth) return []
-            if (root.scanResults.length > 0 && !root.connected) {
-                var n = []
-                for (var i = 0; i < root.scanResults.length; i++) {
-                    var angle = (i / root.scanResults.length) * 2 * Math.PI
-                    n.push({ x: width/2 + 280 * Math.cos(angle), y: height/2 + 280 * Math.sin(angle), color: root.accentColor })
-                }
-                return n
-            }
+            let n = []
             if (root.connected) {
-                return [
-                    { x: width/2 + 300, y: height/2, color: root.accentColor },
-                    { x: width/2, y: height/2 + 300, color: root.accentColor },
-                    { x: width/2 - 300, y: height/2, color: root.accentColor },
-                    { x: width/2, y: height/2 - 300, color: root.accentColor }
-                ]
+                let offsets = [[280,0], [0,280], [-280,0], [0,-280]]
+                for (let o of offsets) n.push({ x: width/2 + o[0], y: height/2 + o[1], color: root.accentColor })
+            } else if (root.scanResults.length > 0) {
+                for (let i = 0; i < root.scanResults.length; i++) {
+                    let res = root.scanResults[i]
+                    let radius = 180 + (100 - res.signal) * 2
+                    let angle = (i / root.scanResults.length) * 2 * Math.PI + (root.animTime * 0.4)
+                    n.push({ x: width/2 + radius * Math.cos(angle), y: height/2 + radius * Math.sin(angle), color: root.accentColor })
+                }
             }
-            return []
+            return n
         }
     }
 
-    // ── VISTA: Grafo de Conexión o Búsqueda ──
     Item {
         anchors.fill: parent
         visible: !root.showingAuth
@@ -121,48 +132,59 @@ Item {
         NetworkNode {
             anchors.centerIn: parent
             icon: root.connected ? "󰖩" : (root.isSearching ? "󰖩" : "󰖪")
-            label: root.connected ? root.ssid : (root.isSearching ? "BUSCANDO..." : "WIFI")
-            subLabel: root.connected ? "Conectado" : "Pulsa para buscar"
+            label: root.isSearching ? "BUSCANDO..." : root.statusText
+            subLabel: root.isSearching ? "Escaneando entorno" : root.subStatusText
             active: root.connected || root.isSearching
             loading: root.isSearching
             accentColor: root.accentColor; scale: 1.5
             onClicked: {
-                if (!root.connected) {
+                if (!root.connected && !root.isSearching) {
                     root.isSearching = true
+                    root.scanResults = []
                     scanProc.running = true
                 }
             }
         }
 
-        // Nodos Satélites (Info Conectada)
+        // Info Satélites
         Repeater {
             model: root.connected ? 4 : 0
             NetworkNode {
                 property var info: [
                     {i:"󰩟", l:"IP Local", s:root.localIp},
-                    {i:"󰖟", l:"IP Pública", s:root.publicIp},
                     {i:"󰇧", l:"MAC", s:root.mac},
-                    {i:"󰈀", l:"Señal", s:root.signal+"%"}
+                    {i:"󰈀", l:"Señal", s:root.signal+"%"},
+                    {i:"󰌍", l:"Desconectar", s:"Cerrar vínculo"}
                 ][index]
-                x: parent.width/2 + (index==0?300 : index==1?0 : index==2?-300 : 0) - 70
-                y: parent.height/2 + (index==0?0 : index==1?300 : index==2?0 : -300) - 70
+                x: parent.width/2 + (index==0?280 : index==1?0 : index==2?-280 : 0) - 70
+                y: parent.height/2 + (index==0?0 : index==1?280 : index==2?0 : -280) - 70
                 icon: info.i; label: info.l; subLabel: info.s
-                accentColor: root.accentColor; scale: 1.1
+                accentColor: index == 3 ? "#f38ba8" : root.accentColor; scale: 1.1
+                onClicked: {
+                    if (index == 3) {
+                        connectProc.command = ["nmcli", "device", "disconnect", "wlan0"]
+                        connectProc.running = true
+                    }
+                }
             }
         }
 
-        // Nodos Satélites (Resultados de Búsqueda)
+        // Resultados Radar (Orbitando)
         Repeater {
             model: (!root.connected && root.scanResults.length > 0) ? root.scanResults.length : 0
             NetworkNode {
                 property var result: root.scanResults[index]
-                x: parent.width/2 + 280 * Math.cos((index/root.scanResults.length)*2*Math.PI) - 70
-                y: parent.height/2 + 280 * Math.sin((index/root.scanResults.length)*2*Math.PI) - 70
+                property real radius: 150 + (100 - result.signal) * 2
+                property real angle: (index / root.scanResults.length) * 2 * Math.PI + (root.animTime * 0.5)
+                
+                x: parent.width/2 + radius * Math.cos(angle) - 70
+                y: parent.height/2 + radius * Math.sin(angle) - 70
+                
                 icon: "󰖩"; label: result.ssid; subLabel: result.signal + "%"; scale: 0.9
                 accentColor: root.accentColor
                 onClicked: {
                     root.selectedSsid = result.ssid
-                    if (result.security !== "--") root.showingAuth = true
+                    if (result.security !== "--" && result.security !== "None") root.showingAuth = true
                     else {
                         connectProc.command = ["nmcli", "device", "wifi", "connect", result.ssid]
                         connectProc.running = true
@@ -170,57 +192,28 @@ Item {
                 }
             }
         }
-
-        // Botón "Atrás" en búsqueda
-        NetworkNode {
-            visible: !root.connected && root.scanResults.length > 0
-            x: parent.width/2 + 150; y: parent.height/2 - 150
-            icon: "󰌍"; label: "ATRÁS"; scale: 0.7; accentColor: "#f38ba8"
-            onClicked: root.scanResults = []
-        }
     }
 
-    // ── VISTA: Formulario de Autenticación ──
+    // Auth Overlay (Simplified)
     Rectangle {
-        anchors.fill: parent
-        visible: root.showingAuth
-        color: "transparent"
-
+        anchors.fill: parent; visible: root.showingAuth; color: Qt.rgba(0,0,0,0.4)
         ColumnLayout {
-            anchors.centerIn: parent
-            spacing: 20
-            width: 400
-
-            NetworkNode {
-                Layout.alignment: Qt.AlignHCenter
-                icon: "󰷦"; label: root.selectedSsid; subLabel: "Requiere contraseña"; scale: 1.2
-                accentColor: root.accentColor
-            }
-
+            anchors.centerIn: parent; spacing: 20; width: 350
+            Text { text: "CONTRASEÑA PARA\n" + root.selectedSsid; font.family: root.font; font.pixelSize: 18; font.bold: true; color: root.cText; horizontalAlignment: Text.AlignHCenter }
             TextField {
-                id: passField
-                Layout.fillWidth: true
-                placeholderText: "Contraseña..."
-                echoMode: TextInput.Password
-                font.family: root.font
-                color: root.cText
-                background: Rectangle { radius: 8; color: root.cSurface; border.color: root.accentColor }
+                id: passField; Layout.fillWidth: true; placeholderText: "Password..."; echoMode: TextInput.Password; font.family: root.font; color: root.cText
+                background: Rectangle { radius: 12; color: root.cSurface; border.color: root.accentColor }
                 onTextChanged: root.password = text
             }
-
             RowLayout {
-                spacing: 15
-                Button {
-                    text: "CANCELAR"; font.family: root.font; Layout.fillWidth: true
-                    onClicked: root.showingAuth = false
-                }
-                Button {
-                    text: "CONECTAR"; font.family: root.font; Layout.fillWidth: true
+                spacing: 12
+                Button { text: "CANCELAR"; Layout.fillWidth: true; onClicked: root.showingAuth = false }
+                Button { 
+                    text: "CONECTAR"; Layout.fillWidth: true; 
                     onClicked: {
                         connectProc.command = ["nmcli", "device", "wifi", "connect", root.selectedSsid, "password", root.password]
                         connectProc.running = true
                         root.showingAuth = false
-                        root.scanResults = []
                     }
                 }
             }

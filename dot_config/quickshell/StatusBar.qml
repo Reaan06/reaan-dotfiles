@@ -16,17 +16,17 @@ Item {
     // Formato de ~/.config/quickshell/.palette:
     //   pill accent1 accent2 accent3 accent4 accent5 text sub
     // ═══════════════════════════════════════════════
-    property color cPill:    Qt.rgba(0.16, 0.16, 0.18, 0.92)
-    property color cHover:   Qt.rgba(0.22, 0.22, 0.25, 0.95)
-    property color cText:    "#c8cad0"
-    property color cSub:     "#5a5a64"
-    property color cTeal:    "#8a9a9e"
-    property color cGreen:   "#7a8e85"
-    property color cMauve:   "#9490a0"
-    property color cYellow:  "#a09882"
-    property color cRed:     "#8a7e7a"
-    property color cBlue:    "#8a9a9e"
-    property color cPeach:   "#a09882"
+    property color cPill:    shellRoot.cPill
+    property color cHover:   shellRoot.cHover
+    property color cText:    shellRoot.cText
+    property color cSub:     shellRoot.cSub
+    property color cTeal:    shellRoot.cTeal
+    property color cGreen:   shellRoot.cGreen
+    property color cMauve:   shellRoot.cMauve
+    property color cYellow:  shellRoot.cYellow
+    property color cRed:     shellRoot.cRed
+    property color cBlue:    shellRoot.cBlue
+    property color cPeach:   shellRoot.cPeach
     readonly property string font:    "JetBrains Mono Nerd Font"
 
     // ═══════════════════════════════════════════════
@@ -99,6 +99,10 @@ Item {
     property string _mpPrevTitle: ""
     property real   mpInfoOpacity: 1.0
 
+    // ═══════════════════════════════════════════════
+    // MPRIS
+    // ═══════════════════════════════════════════════
+
     // Live position ticker — increments every second while playing
     Timer {
         interval: 1000; running: root.mpPlaying && root.mpActive; repeat: true
@@ -118,17 +122,9 @@ Item {
         }
     }
 
-    // Palette (una sola vez)
-    Process {
-        id: paletteProc
-        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
-        stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
-    }
     Component.onCompleted: {
-        paletteProc.running = true
         updateAnchors()
     }
-    Timer { interval: 3000; running: true; repeat: true; onTriggered: paletteProc.running = true }
 
     // Layout de teclado actual
     Process {
@@ -256,6 +252,10 @@ Item {
         NumberAnimation { target: root; property: "mpInfoOpacity"; to: 1.0; duration: 300; easing.type: Easing.OutCubic }
     }
 
+
+    // Lanzador genérico de apps
+    Process { id: appLauncher }
+
     // Acciones one-shot
     Process { id: aRofi;   command: ["rofi", "-show", "drun"] }
     Process { id: aPower;  command: ["sh", "-c", "~/.config/scripts/powermenu.sh"] }
@@ -293,38 +293,6 @@ Item {
         return str.length > max ? str.substring(0, max - 1) + "…" : str
     }
 
-    // Parsea la paleta dinámica desde el archivo de cache
-    // Formato: "#hex1 #hex2 #hex3 #hex4 #hex5 #hex6 #hex7 #hex8"
-    //           pill  acc1   acc2   acc3   acc4   acc5   text   sub
-    property string _lastPalette: ""
-    function parsePalette(raw) {
-        if (!raw || raw.length === 0 || raw === _lastPalette) return
-        var parts = raw.split(" ")
-        if (parts.length < 8) return
-        _lastPalette = raw
-        try {
-            var pc = parts[0]
-            if (pc && pc.startsWith("#") && pc.length >= 7) {
-                cPill  = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
-                                 parseInt(pc.substr(3,2),16)/255,
-                                 parseInt(pc.substr(5,2),16)/255, 0.92)
-                cHover = Qt.rgba(parseInt(pc.substr(1,2),16)/255 + 0.06,
-                                 parseInt(pc.substr(3,2),16)/255 + 0.06,
-                                 parseInt(pc.substr(5,2),16)/255 + 0.06, 0.95)
-            }
-            cTeal   = parts[1] || cTeal
-            cGreen  = parts[2] || cGreen
-            cMauve  = parts[3] || cMauve
-            cYellow = parts[4] || cYellow
-            cRed    = parts[5] || cRed
-            cText   = parts[6] || cText
-            cSub    = parts[7] || cSub
-            cBlue   = parts[1] || cBlue
-            cPeach  = parts[4] || cPeach
-        } catch (e) {
-            console.log("Error parsing palette: " + e)
-        }
-    }
 
     // ═══════════════════════════════════════════════
     // LAYOUT — SIN fondo de barra, pills flotantes
@@ -405,6 +373,7 @@ Item {
                 }
             }
         }
+
 
         // ──────── 3. MPRIS — art | info(2 líneas) | controles ────────
         Pill {

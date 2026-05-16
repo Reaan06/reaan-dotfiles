@@ -30,37 +30,31 @@ Item {
         command: ["sh", "-c", "~/.config/scripts/bt-manager.sh info"]
         stdout: StdioCollector {
             onStreamFinished: (text) => {
-                var parts = text.trim().split("|")
-                if (parts[0] === "connected") {
-                    root.connected = true
-                    root.deviceName = parts[1] || "Unknown"
-                    root.mac = parts[2] || "N/A"
-                    root.battery = parts[3] || "N/A"
-                    root.type = parts[4] || "unknown"
-                } else {
-                    root.connected = false
-                }
+                try {
+                    var data = JSON.parse(text.trim())
+                    if (data.status === "connected") {
+                        root.connected = true
+                        root.deviceName = data.name
+                        root.mac = data.mac
+                        root.battery = data.battery
+                        root.type = data.type
+                    } else {
+                        root.connected = false
+                    }
+                } catch(e) {}
             }
         }
     }
 
     Process {
         id: btScanProc
-        command: ["sh", "-c", "~/.config/scripts/bt-manager.sh devices"]
+        command: ["sh", "-c", "~/.config/scripts/bt-manager.sh scan"]
         stdout: StdioCollector {
             onStreamFinished: (text) => {
-                var lines = text.trim().split("\n")
-                var results = []
-                for (var i = 0; i < lines.length; i++) {
-                    if (lines[i]) {
-                        var p = lines[i].split(" ")
-                        if (p.length >= 3) {
-                            results.push({mac: p[1], name: p.slice(2).join(" ")})
-                        }
-                    }
-                }
-                root.scanResults = results
-                root.isSearching = false
+                try {
+                    root.scanResults = JSON.parse(text.trim())
+                    root.isSearching = false
+                } catch(e) { root.isSearching = false }
             }
         }
     }
@@ -69,40 +63,37 @@ Item {
 
     Timer { interval: 4000; running: !root.isSearching; repeat: true; triggeredOnStart: true; onTriggered: btInfoProc.running = true }
 
+    property real animTime: 0
+    Timer { interval: 16; running: root.isSearching || (!root.connected && root.scanResults.length > 0); repeat: true; onTriggered: root.animTime += 0.016 }
+
     // Grafo
     GraphCanvas {
         anchors.fill: parent
         centerX: width / 2; centerY: height / 2
         nodes: {
-            if (root.scanResults.length > 0 && !root.connected) {
-                var n = []
-                for (var i = 0; i < root.scanResults.length; i++) {
-                    var angle = (i / root.scanResults.length) * 2 * Math.PI
+            let n = []
+            if (root.connected) {
+                let offsets = [[250, 180], [-250, 180], [0, -250]]
+                for (let o of offsets) n.push({ x: width/2 + o[0], y: height/2 + o[1], color: root.accentColor })
+            } else if (root.scanResults.length > 0) {
+                for (let i = 0; i < root.scanResults.length; i++) {
+                    let angle = (i / root.scanResults.length) * 2 * Math.PI + (root.animTime * 0.4)
                     n.push({ x: width/2 + 280 * Math.cos(angle), y: height/2 + 280 * Math.sin(angle), color: root.accentColor })
                 }
-                return n
             }
-            if (root.connected) {
-                return [
-                    { x: width/2 + 250, y: height/2 + 180, color: root.accentColor },
-                    { x: width/2 - 250, y: height/2 + 180, color: root.accentColor },
-                    { x: width/2, y: height/2 - 250, color: root.accentColor }
-                ]
-            }
-            return []
+            return n
         }
     }
 
     // Nodo Central
     NetworkNode {
         anchors.centerIn: parent
-        icon: root.connected ? "󰂱" : (root.isSearching ? "󰂯" : "󰂲")
+        icon: root.connected ? (root.type === "audio-card" || root.type === "audio-headset" ? "󰋋" : "󰂱") : (root.isSearching ? "󰂯" : "󰂲")
         label: root.connected ? root.deviceName : (root.isSearching ? "BUSCANDO..." : "BLUETOOTH")
         subLabel: root.connected ? "Enlace Activo" : "Pulsa para buscar"
         active: root.connected || root.isSearching
         loading: root.isSearching
         accentColor: root.accentColor; scale: 1.5
-        cBg: root.cBg; cText: root.cText; cSub: root.cSub
         onClicked: {
             if (!root.connected) {
                 root.isSearching = true
@@ -116,20 +107,19 @@ Item {
         model: root.connected ? 3 : 0
         NetworkNode {
             property var info: [
-                {i:"󰥉", l:"Batería", s:root.battery + "%"},
+                {i:"󰥉", l:"Batería", s:root.battery + (root.battery !== "N/A" ? "%" : "")},
                 {i:"󰇧", l:"MAC ID", s:root.mac},
-                {i: (root.type === "audio-card" ? "󰓃" : "󰂯"), l:"Desconectar", s:"Forzar cierre"}
+                {i:"󰂲", l:"Desconectar", s:"Cerrar vínculo"}
             ][index]
             x: parent.width/2 + (index==0?250 : index==1?-250 : 0) - 70
             y: parent.height/2 + (index==0?180 : index==1?180 : -250) - 70
             icon: info.i; label: info.l; subLabel: info.s
             accentColor: (index == 2) ? "#f38ba8" : root.accentColor; scale: 1.1
-            cBg: root.cBg; cText: root.cText; cSub: root.cSub
             onClicked: {
-                if (index == 0) execProc.command = ["sh", "-c", "notify-send 'Energía' 'Batería: " + root.battery + "%'"]
-                else if (index == 1) execProc.command = ["sh", "-c", "echo '" + root.mac + "' | wl-copy && notify-send 'Copiado' 'MAC copiada'"]
-                else if (index == 2) execProc.command = ["sh", "-c", "bluetoothctl disconnect " + root.mac + " && notify-send 'Bluetooth' 'Dispositivo desconectado'"]
-                execProc.running = true
+                if (index == 2) {
+                    execProc.command = ["bluetoothctl", "disconnect", root.mac]
+                    execProc.running = true
+                }
             }
         }
     }
@@ -139,12 +129,15 @@ Item {
         model: (!root.connected && root.scanResults.length > 0) ? root.scanResults.length : 0
         NetworkNode {
             property var result: root.scanResults[index]
-            x: parent.width/2 + 280 * Math.cos((index/root.scanResults.length)*2*Math.PI) - 70
-            y: parent.height/2 + 280 * Math.sin((index/root.scanResults.length)*2*Math.PI) - 70
+            property real angle: (index / root.scanResults.length) * 2 * Math.PI + (root.animTime * 0.4)
+            
+            x: parent.width/2 + 280 * Math.cos(angle) - 70
+            y: parent.height/2 + 280 * Math.sin(angle) - 70
+            
             icon: "󰂯"; label: result.name; subLabel: "Pulsa para vincular"; scale: 0.9
             accentColor: root.accentColor
             onClicked: {
-                execProc.command = ["sh", "-c", "bluetoothctl connect " + result.mac]
+                execProc.command = ["sh", "-c", "bluetoothctl pair " + result.mac + " && bluetoothctl trust " + result.mac + " && bluetoothctl connect " + result.mac]
                 execProc.running = true
                 root.scanResults = []
             }

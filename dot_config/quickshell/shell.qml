@@ -26,6 +26,52 @@ ShellRoot {
     property string _lastF2State: ""
     property string _lastBtState: ""
 
+    // ── Global Palette ──
+    property color cPill:    Qt.rgba(0.16, 0.16, 0.18, 0.92)
+    property color cHover:   Qt.rgba(0.22, 0.22, 0.25, 0.95)
+    property color cText:    "#c8cad0"
+    property color cSub:     "#5a5a64"
+    property color cTeal:    "#8a9a9e"
+    property color cGreen:   "#7a8e85"
+    property color cMauve:   "#9490a0"
+    property color cYellow:  "#a09882"
+    property color cRed:     "#8a7e7a"
+    property color cBlue:    "#8a9a9e"
+    property color cPeach:   "#a09882"
+
+    Process {
+        id: paletteProc
+        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
+        stdout: StdioCollector { onStreamFinished: { parsePalette(text.trim()) } }
+    }
+    Timer { interval: 3000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
+
+    function parsePalette(raw) {
+        if (!raw || raw.length === 0) return
+        var parts = raw.split(" ")
+        if (parts.length < 8) return
+        try {
+            var pc = parts[0]
+            if (pc && pc.startsWith("#") && pc.length >= 7) {
+                cPill  = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
+                                 parseInt(pc.substr(3,2),16)/255,
+                                 parseInt(pc.substr(5,2),16)/255, 0.92)
+                cHover = Qt.rgba(parseInt(pc.substr(1,2),16)/255 + 0.06,
+                                 parseInt(pc.substr(3,2),16)/255 + 0.06,
+                                 parseInt(pc.substr(5,2),16)/255 + 0.06, 0.95)
+            }
+            cTeal   = parts[1] || cTeal
+            cGreen  = parts[2] || cGreen
+            cMauve  = parts[3] || cMauve
+            cYellow = parts[4] || cYellow
+            cRed    = parts[5] || cRed
+            cText   = parts[6] || cText
+            cSub    = parts[7] || cSub
+            cBlue   = parts[1] || cBlue
+            cPeach  = parts[4] || cPeach
+        } catch (e) { console.log("Error parsing palette: " + e) }
+    }
+
     Process {
         id: amStateProc
         command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null"]
@@ -217,6 +263,40 @@ ShellRoot {
                 anchors.fill: parent
                 active: btVisible
                 scale: 1.15 // Bajamos escala para que el layout nativo maneje el espacio extra
+            }
+        }
+    }
+
+    // ── Dock Antigravity (Bottom, centered) ──
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            id: dockWin
+            property var modelData
+            screen: modelData
+            
+            anchors.bottom: true
+            anchors.left: true
+            focusable: true
+            
+            // Centrado dinámico basado en el ancho real
+            margins.left: (screen.width - implicitWidth) / 2
+            
+            // Ancho dinámico: lo que necesite el dock + margen
+            implicitWidth: dm.dockWidth + 100
+            
+            // Altura dinámica: 
+            // - 480 si el launcher está abierto
+            // - 100 si el dock está desplegado
+            // - 40 si está en modo "notch" (oculto)
+            implicitHeight: dm.launcherOpen ? 550 : (dm.active ? 100 : 40)
+            
+            exclusionMode: ExclusionMode.Ignore
+            color: "transparent"
+            
+            DockManager { 
+                id: dm
+                anchors.fill: parent 
             }
         }
     }
