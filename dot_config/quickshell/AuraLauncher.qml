@@ -213,7 +213,7 @@ Rectangle {
                                         }
                                         root.pinnedApps = currentPinned; // Esto dispara la señal onPinnedAppsChanged
                                         
-                                        pinProcess.command = ["sh", "-c", "python3 /home/reaan/reaan-dotfiles/dot_config/scripts/pin_app.py " + appClass]
+                                        pinProcess.command = ["sh", "-c", "python3 $HOME/.config/scripts/pin_app.py " + appClass]
                                         pinProcess.running = true
                                     }
                                 }

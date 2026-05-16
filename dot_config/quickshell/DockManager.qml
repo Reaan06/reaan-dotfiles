@@ -35,7 +35,7 @@ Item {
     ListModel { id: topAppsModel }
     Process {
         id: topAppsReader
-        command: ["sh", "-c", "cat /home/reaan/.cache/app_usage.json 2>/dev/null || echo '{}'"]
+        command: ["sh", "-c", "cat $HOME/.cache/app_usage.json 2>/dev/null || echo '{}'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (text && text.trim().length > 0) {
@@ -120,7 +120,7 @@ Item {
     Timer { id: hideTimer; interval: 1000; onTriggered: if (!root.launcherOpen && !root.isHovered) root.active = false }
 
     function loadPinned() {
-        var path = "/home/reaan/.config/scripts/pinned_apps.json"
+        var path = Quickshell.env["HOME"] + "/.config/scripts/pinned_apps.json"
         try {
             var content = Quickshell.readFile(path)
             if (content) root.pinnedApps = JSON.parse(content)
@@ -128,7 +128,7 @@ Item {
     }
     
     function loadHidden() {
-        var path = "/home/reaan/.config/scripts/hidden_apps.json"
+        var path = Quickshell.env["HOME"] + "/.config/scripts/hidden_apps.json"
         try {
             var content = Quickshell.readFile(path)
             if (content) root.hiddenApps = JSON.parse(content)
@@ -144,7 +144,7 @@ Item {
             currentPinned.splice(idx, 1);
         }
         root.pinnedApps = currentPinned; 
-        pinProcess.command = ["sh", "-c", "python3 /home/reaan/reaan-dotfiles/dot_config/scripts/pin_app.py " + appClass]
+        pinProcess.command = ["sh", "-c", "python3 $HOME/.config/scripts/pin_app.py " + appClass]
         pinProcess.running = true
     }
     
@@ -157,7 +157,7 @@ Item {
             currentHidden.splice(idx, 1);
         }
         root.hiddenApps = currentHidden;
-        hideProcess.command = ["sh", "-c", "python3 /home/reaan/reaan-dotfiles/dot_config/scripts/hide_app.py " + appClass]
+        hideProcess.command = ["sh", "-c", "python3 $HOME/.config/scripts/hide_app.py " + appClass]
         hideProcess.running = true
     }
     
@@ -196,7 +196,7 @@ Item {
 
     Process {
         id: dockBridge
-        command: ["sh", "-c", "python3 /home/reaan/reaan-dotfiles/dot_config/scripts/dock_bridge.py"]
+        command: ["sh", "-c", "python3 $HOME/.config/scripts/dock_bridge.py"]
     }
 
     Process {
@@ -226,7 +226,7 @@ Item {
     property var allApps: []
     Process {
         id: auraData
-        command: ["sh", "-c", "python3 /home/reaan/reaan-dotfiles/dot_config/scripts/app_launcher_data.py"]
+        command: ["sh", "-c", "python3 $HOME/.config/scripts/app_launcher_data.py"]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (!text || text.trim() === "") return;
