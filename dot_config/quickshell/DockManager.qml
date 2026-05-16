@@ -11,7 +11,9 @@ Item {
     id: root
     property bool active: false // Desplegado
     property var pinnedApps: []
+    property var hiddenApps: []
     property var activeApps: ({})
+    property var rawUsage: ({})
     
     MouseArea {
         id: mouseCollector
@@ -70,8 +72,20 @@ Item {
             }
             if (changed) {
                 topAppsModel.clear()
-                for (var j = 0; j < top7.length; j++) topAppsModel.append(top7[j])
+                for (var j = 0; j < top7.length; j++) {
+                    var appName = top7[j].name;
+                    var appIcon = appName.toLowerCase();
+                    // Intentar buscar el icono real en allApps
+                    for (var k = 0; k < root.allApps.length; k++) {
+                        if (root.allApps[k].class === appName || root.allApps[k].name === appName) {
+                            appIcon = root.allApps[k].icon;
+                            break;
+                        }
+                    }
+                    topAppsModel.append({ name: appName, time: top7[j].time, icon: appIcon });
+                }
             }
+            root.rawUsage = daily
         } catch(e) { console.log("Dock topApps error: " + e) }
     }
 
@@ -104,6 +118,81 @@ Item {
     
     Timer { id: showTimer; interval: 50; onTriggered: root.active = true }
     Timer { id: hideTimer; interval: 1000; onTriggered: if (!root.launcherOpen && !root.isHovered) root.active = false }
+
+    function loadPinned() {
+        var path = "/home/reaan/.config/scripts/pinned_apps.json"
+        try {
+            var content = Quickshell.readFile(path)
+            if (content) root.pinnedApps = JSON.parse(content)
+        } catch(e) { root.pinnedApps = [] }
+    }
+    
+    function loadHidden() {
+        var path = "/home/reaan/.config/scripts/hidden_apps.json"
+        try {
+            var content = Quickshell.readFile(path)
+            if (content) root.hiddenApps = JSON.parse(content)
+        } catch(e) { root.hiddenApps = [] }
+    }
+    
+    function togglePin(appClass) {
+        var currentPinned = Array.from(root.pinnedApps);
+        var idx = currentPinned.indexOf(appClass);
+        if (idx === -1) {
+            currentPinned.push(appClass);
+        } else {
+            currentPinned.splice(idx, 1);
+        }
+        root.pinnedApps = currentPinned; 
+        pinProcess.command = ["sh", "-c", "python3 /home/reaan/reaan-dotfiles/dot_config/scripts/pin_app.py " + appClass]
+        pinProcess.running = true
+    }
+    
+    function toggleHide(appClass) {
+        var currentHidden = Array.from(root.hiddenApps);
+        var idx = currentHidden.indexOf(appClass);
+        if (idx === -1) {
+            currentHidden.push(appClass);
+        } else {
+            currentHidden.splice(idx, 1);
+        }
+        root.hiddenApps = currentHidden;
+        hideProcess.command = ["sh", "-c", "python3 /home/reaan/reaan-dotfiles/dot_config/scripts/hide_app.py " + appClass]
+        hideProcess.running = true
+    }
+    
+    function getIconForClass(className) {
+        if (!className) return "application-x-executable";
+        var lowerClass = className.toLowerCase();
+        
+        // 1. Mapeos manuales exactos (Alta prioridad)
+        if (lowerClass === "sober" || lowerClass === "org.vinegarhq.sober") 
+            return "/var/lib/flatpak/appstream/flathub/x86_64/fe3c325c6b3b62554b14d1bc4e86ed91546c79a3795939ba8267336264a50a3a/icons/128x128/org.vinegarhq.Sober.png";
+        if (lowerClass === "llauncher") return "legacy-launcher";
+        if (lowerClass === "obsidian") return "obsidian";
+        if (lowerClass === "obs") return "obs";
+
+        // 2. Buscar coincidencia exacta en allApps
+        for (var i = 0; i < root.allApps.length; i++) {
+            var app = root.allApps[i];
+            if ((app.class && app.class.toLowerCase() === lowerClass) || 
+                (app.name && app.name.toLowerCase() === lowerClass)) {
+                return app.icon;
+            }
+        }
+
+        // 3. Búsqueda difusa (Solo como último recurso)
+        for (var j = 0; j < root.allApps.length; j++) {
+            var a = root.allApps[j];
+            var appExec = (a.exec || "").toLowerCase();
+            // Evitar coincidencias falsas con nombres cortos como "obs"
+            if (appExec.indexOf(lowerClass) !== -1 && lowerClass.length > 3) {
+                return a.icon;
+            }
+        }
+        
+        return lowerClass;
+    }
 
     Process {
         id: dockBridge
@@ -157,6 +246,8 @@ Item {
     Component.onCompleted: {
         dockBridge.running = true
         auraData.running = true
+        loadPinned()
+        loadHidden()
     }
 
     // Visual Dock
@@ -190,14 +281,26 @@ Item {
             
             // TOP APPS (Las más usadas)
             Repeater {
-                model: topAppsModel
+                model: {
+                    var filtered = []
+                    for (var i = 0; i < topAppsModel.count; i++) {
+                        var item = topAppsModel.get(i)
+                        // No mostrar si está fijada (para evitar duplicados) o si está oculta
+                        if (root.pinnedApps.indexOf(item.name) === -1 && root.hiddenApps.indexOf(item.name) === -1) {
+                            filtered.push(item)
+                        }
+                    }
+                    return filtered
+                }
                 DockItem {
-                    name: model.name
-                    iconName: model.name.toLowerCase()
-                    execCmd: model.name
-                    isActive: !!root.activeApps[model.name]
-                    appClass: model.name
+                    name: modelData.name
+                    iconName: modelData.icon
+                    execCmd: modelData.name
+                    isActive: !!root.activeApps[modelData.name]
+                    appClass: modelData.name
+                    isPinned: false // Son apps por uso
                     accentColor: shellRoot.cTeal
+                    onPinToggled: root.toggleHide(appClass) // Para apps de uso, el botón las oculta
                 }
             }
 
@@ -208,11 +311,12 @@ Item {
                 model: root.pinnedApps
                 DockItem {
                     appClass: modelData
-                    iconName: modelData.toLowerCase()
+                    iconName: root.getIconForClass(modelData)
                     execCmd: modelData
                     isActive: !!root.activeApps[modelData]
                     isPinned: true
                     accentColor: shellRoot.cBlue
+                    onPinToggled: root.togglePin(appClass)
                 }
             }
 
@@ -232,10 +336,11 @@ Item {
                 })
                 DockItem {
                     appClass: modelData
-                    iconName: modelData.toLowerCase()
+                    iconName: root.getIconForClass(modelData)
                     isActive: true
                     isPinned: false
                     accentColor: shellRoot.cMauve
+                    onPinToggled: root.togglePin(appClass)
                 }
             }
         }
@@ -261,5 +366,11 @@ Item {
         allApps: root.allApps
         pinnedApps: root.pinnedApps
         activeApps: root.activeApps
+        usageData: root.rawUsage
+        hiddenApps: root.hiddenApps
     }
+    
+    Process { id: pinProcess }
+    Process { id: hideProcess }
+    Process { id: focusProcess }
 }

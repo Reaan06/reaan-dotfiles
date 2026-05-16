@@ -17,6 +17,8 @@ Rectangle {
     property bool isPinned: false
     property color accentColor: "#89b4fa"
     
+    signal pinToggled()
+    
     width: 48; height: 48; radius: 12
     color: mouseArea.containsMouse ? Qt.rgba(1,1,1,0.1) : "transparent"
     
@@ -27,7 +29,10 @@ Rectangle {
         anchors.centerIn: parent
         anchors.margins: 8
         width: 32; height: 32
-        source: "image://icon/" + root.iconName
+        source: {
+            if (root.iconName.startsWith("/")) return "file://" + root.iconName;
+            return "image://icon/" + (root.iconName || "application-x-executable");
+        }
         fillMode: Image.PreserveAspectFit
         
         scale: mouseArea.containsMouse ? 1.2 : 1.0
@@ -43,8 +48,29 @@ Rectangle {
         height: 4; radius: 2
         color: root.accentColor
         visible: root.isActive
-        
         Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
+    }
+    // Pin Toggle Button (Same as launcher)
+    Rectangle {
+        anchors.top: parent.top; anchors.right: parent.right
+        anchors.topMargin: -2; anchors.rightMargin: -2
+        width: 20; height: 20; radius: 10
+        color: root.isPinned ? shellRoot.cMauve : Qt.rgba(0,0,0,0.5)
+        border.color: Qt.rgba(1,1,1,0.2); border.width: 1
+        visible: mouseArea.containsMouse
+        z: 10
+        
+        Text {
+            anchors.centerIn: parent
+            text: "󰐃"
+            color: "white"
+            font.pixelSize: 10
+        }
+        
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.pinToggled()
+        }
     }
     
     MouseArea {
@@ -52,7 +78,13 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: (mouse) => {
+            if (mouse.button === Qt.RightButton) {
+                root.pinToggled()
+                return;
+            }
+            
             root.scale = 0.9
             clickAnimation.start()
             

@@ -14,7 +14,51 @@ Rectangle {
     property var allApps: []
     property var pinnedApps: []
     property var activeApps: ({})
+    property var usageData: ({})
+    property var hiddenApps: []
     property string filter: ""
+    
+    // Modelo interno para evitar saltos de scroll
+    ListModel { id: filteredModel }
+    
+    function updateModel() {
+        var apps = Array.from(root.allApps);
+        apps.sort(function(a, b) {
+            var usageA = (root.usageData[a.class] || root.usageData[a.name] || {time: 0}).time || 0;
+            var usageB = (root.usageData[b.class] || root.usageData[b.name] || {time: 0}).time || 0;
+            return usageB - usageA;
+        });
+
+        var result = apps.filter(function(app) {
+            var appClass = app.class || app.name;
+            // Volver a ocultar si está fijada en el dock (el usuario cambió de opinión)
+            if (root.pinnedApps.indexOf(appClass) !== -1) return false;
+            
+            if (!root.filter) return true;
+            var f = root.filter.toLowerCase();
+            return (app.name && app.name.toLowerCase().indexOf(f) !== -1) || 
+                   (app.class && app.class.toLowerCase().indexOf(f) !== -1) ||
+                   (app.exec && app.exec.toLowerCase().indexOf(f) !== -1);
+        });
+
+        // Actualización inteligente del modelo
+        if (filteredModel.count !== result.length) {
+            filteredModel.clear();
+            for (var i = 0; i < result.length; i++) filteredModel.append(result[i]);
+        } else {
+            for (var j = 0; j < result.length; j++) {
+                var current = filteredModel.get(j);
+                if (current.name !== result[j].name) {
+                    filteredModel.set(j, result[j]);
+                }
+            }
+        }
+    }
+
+    onAllAppsChanged: updateModel()
+    onPinnedAppsChanged: updateModel()
+    onFilterChanged: updateModel()
+    onUsageDataChanged: updateModel()
     
     radius: 24; color: shellRoot.cPill
     border.color: Qt.rgba(1,1,1,0.1); border.width: 1
@@ -85,16 +129,7 @@ Rectangle {
             cellWidth: 90
             cellHeight: 110
             
-            model: {
-                if (!root.filter) return root.allApps;
-                return root.allApps.filter(function(app) {
-                    var f = root.filter.toLowerCase();
-                    var nameMatch = app.name && app.name.toLowerCase().indexOf(f) !== -1;
-                    var classMatch = app.class && app.class.toLowerCase().indexOf(f) !== -1;
-                    var execMatch = app.exec && app.exec.toLowerCase().indexOf(f) !== -1;
-                    return nameMatch || classMatch || execMatch;
-                });
-            }
+            model: filteredModel
             
             delegate: Item {
                 width: appGrid.cellWidth
@@ -106,7 +141,7 @@ Rectangle {
                     width: 80; height: 100; radius: 12
                     color: ma.containsMouse ? Qt.rgba(1,1,1,0.08) : "transparent"
                     
-                    readonly property string appClass: modelData.class || modelData.name
+                    readonly property string appClass: model.class || model.name
                     readonly property bool isPinned: root.pinnedApps.includes(appDelegate.appClass)
                     
                     MouseArea {
@@ -117,7 +152,7 @@ Rectangle {
                                 focusProcess.command = ["/usr/bin/hyprctl", "dispatch", "focuswindow", appClass]
                                 focusProcess.running = true
                             } else {
-                                var cmd = ["sh", "-c", "/usr/bin/hyprctl dispatch exec " + appClass + " || " + modelData.exec + " &"]
+                                var cmd = ["sh", "-c", "/usr/bin/hyprctl dispatch exec " + appClass + " || " + model.exec + " &"]
                                 execApp.command = cmd; execApp.running = true
                             }
                             root.active = false
@@ -136,7 +171,17 @@ Rectangle {
                             Image {
                                 anchors.centerIn: parent
                                 width: 42; height: 42
-                                source: "image://icon/" + (modelData.icon || "application-x-executable")
+                                source: {
+                                    var iconName = model.icon || "application-x-executable";
+                                    // Prioridad absoluta a mapeos manuales correctos
+                                    if (model.name === "Obsidian" || (model.class || "").toLowerCase() === "obsidian") iconName = "obsidian";
+                                    // Sober usa ruta absoluta porque está en Flatpak fuera del tema de iconos
+                                    if (model.name === "Sober" || iconName === "org.vinegarhq.Sober") 
+                                        return "file:///var/lib/flatpak/appstream/flathub/x86_64/fe3c325c6b3b62554b14d1bc4e86ed91546c79a3795939ba8267336264a50a3a/icons/128x128/org.vinegarhq.Sober.png";
+                                    
+                                    if (iconName.startsWith("/")) return "file://" + iconName;
+                                    return "image://icon/" + iconName;
+                                }
                                 fillMode: Image.PreserveAspectFit
                             }
                             
@@ -157,7 +202,18 @@ Rectangle {
                                 MouseArea {
                                     anchors.fill: parent
                                     onClicked: {
-                                        pinProcess.command = ["sh", "-c", "python3 /home/reaan/reaan-dotfiles/dot_config/scripts/pin_app.py " + appDelegate.appClass]
+                                        var appClass = appDelegate.appClass;
+                                        // Pin instantáneo en la UI creando un NUEVO array
+                                        var currentPinned = Array.from(root.pinnedApps);
+                                        var idx = currentPinned.indexOf(appClass);
+                                        if (idx === -1) {
+                                            currentPinned.push(appClass);
+                                        } else {
+                                            currentPinned.splice(idx, 1);
+                                        }
+                                        root.pinnedApps = currentPinned; // Esto dispara la señal onPinnedAppsChanged
+                                        
+                                        pinProcess.command = ["sh", "-c", "python3 /home/reaan/reaan-dotfiles/dot_config/scripts/pin_app.py " + appClass]
                                         pinProcess.running = true
                                     }
                                 }
@@ -166,7 +222,7 @@ Rectangle {
                         
                         Text {
                             Layout.fillWidth: true
-                            text: modelData.name
+                            text: model.name
                             color: "white"
                             font.pixelSize: 10
                             horizontalAlignment: Text.AlignHCenter
