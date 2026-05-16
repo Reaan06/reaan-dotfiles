@@ -11,7 +11,7 @@ dock_bridge.py — Puente de datos para el Dock Antigravity.
 Rastrea ventanas abiertas y gestiona apps fijadas.
 """
 
-PINNED_FILE = os.path.expanduser('~/.config/quickshell/pinned_apps.json')
+PINNED_FILE = os.path.expanduser('~/.config/scripts/pinned_apps.json')
 USAGE_FILE = os.path.expanduser('~/.cache/app_usage.json')
 STATE_FILE = os.path.expanduser('/tmp/qs-dock-state.json')
 

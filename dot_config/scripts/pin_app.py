@@ -2,7 +2,7 @@ import sys
 import json
 import os
 
-PINNED_FILE = os.path.expanduser('~/.config/quickshell/pinned_apps.json')
+PINNED_FILE = os.path.expanduser('~/.config/scripts/pinned_apps.json')
 
 def toggle_pin(app_class):
     if not os.path.exists(PINNED_FILE):
