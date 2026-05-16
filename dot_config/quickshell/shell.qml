@@ -282,14 +282,14 @@ ShellRoot {
             // Centrado dinámico basado en el ancho real
             margins.left: (screen.width - implicitWidth) / 2
             
-            // Ancho dinámico: lo que necesite el dock + margen
-            implicitWidth: dm.dockWidth + 100
+            // Ancho dinámico: El ancho del dock + margen, pero NUNCA menor que el launcher si está abierto
+            implicitWidth: Math.max(dm.dockWidth + 100, dm.launcherOpen ? 550 : 0)
             
             // Altura dinámica: 
-            // - 480 si el launcher está abierto
+            // - 600 si el launcher está abierto (para evitar recortes en la sombra/escala)
             // - 100 si el dock está desplegado
             // - 40 si está en modo "notch" (oculto)
-            implicitHeight: dm.launcherOpen ? 550 : (dm.active ? 100 : 40)
+            implicitHeight: dm.launcherOpen ? 600 : (dm.active ? 100 : 40)
             
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"

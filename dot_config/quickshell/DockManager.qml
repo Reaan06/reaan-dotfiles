@@ -55,25 +55,25 @@ Item {
         try {
             if (!jsonStr || jsonStr.trim() === "") return
             var data = JSON.parse(jsonStr)
-            var daily = data["daily"]
-            if (!daily) return
+            var usage = data["weekly"] || data["monthly"] || data["daily"]
+            if (!usage) return
             var sorted = []
-            for (var key in daily) {
+            for (var key in usage) {
                 if (key === "_total_" || key === "" || key.startsWith("_")) continue
-                if (daily[key].time > 10) sorted.push({ name: key, time: daily[key].time })
+                if (usage[key].time > 10) sorted.push({ name: key, time: usage[key].time })
             }
             sorted.sort(function(a, b) { return b.time - a.time })
-            var top7 = sorted.slice(0, 7)
-            var changed = (top7.length !== topAppsModel.count)
+            var top20 = sorted.slice(0, 20)
+            var changed = (top20.length !== topAppsModel.count)
             if (!changed) {
-                for (var i = 0; i < top7.length; i++) {
-                    if (topAppsModel.get(i).name !== top7[i].name) { changed = true; break }
+                for (var i = 0; i < top20.length; i++) {
+                    if (topAppsModel.get(i).name !== top20[i].name) { changed = true; break }
                 }
             }
             if (changed) {
                 topAppsModel.clear()
-                for (var j = 0; j < top7.length; j++) {
-                    var appName = top7[j].name;
+                for (var j = 0; j < top20.length; j++) {
+                    var appName = top20[j].name;
                     var appIcon = appName.toLowerCase();
                     // Intentar buscar el icono real en allApps
                     for (var k = 0; k < root.allApps.length; k++) {
@@ -82,10 +82,10 @@ Item {
                             break;
                         }
                     }
-                    topAppsModel.append({ name: appName, time: top7[j].time, icon: appIcon });
+                    topAppsModel.append({ name: appName, time: top20[j].time, icon: appIcon });
                 }
             }
-            root.rawUsage = daily
+            root.rawUsage = usage
         } catch(e) { console.log("Dock topApps error: " + e) }
     }
 
@@ -207,8 +207,15 @@ Item {
                 if (!text || text.trim() === "") return;
                 try {
                     var data = JSON.parse(text.trim())
-                    root.pinnedApps = data.pinned || []
-                    root.activeApps = data.active || ({})
+                    var newPinned = data.pinned || []
+                    var newActive = data.active || ({})
+                    
+                    if (JSON.stringify(root.pinnedApps) !== JSON.stringify(newPinned)) {
+                        root.pinnedApps = newPinned
+                    }
+                    if (JSON.stringify(root.activeApps) !== JSON.stringify(newActive)) {
+                        root.activeApps = newActive
+                    }
                 } catch(e) {}
             }
         }
@@ -262,7 +269,7 @@ Item {
         
         width: contentRow.implicitWidth + 40
         
-        Behavior on anchors.bottomMargin { NumberAnimation { duration: 400; easing.type: Easing.OutBack } }
+        Behavior on anchors.bottomMargin { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
         Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
         
         RowLayout {
@@ -288,6 +295,7 @@ Item {
                         // No mostrar si está fijada (para evitar duplicados) o si está oculta
                         if (root.pinnedApps.indexOf(item.name) === -1 && root.hiddenApps.indexOf(item.name) === -1) {
                             filtered.push(item)
+                            if (filtered.length >= 7) break;
                         }
                     }
                     return filtered

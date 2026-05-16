@@ -64,9 +64,9 @@ Rectangle {
     border.color: Qt.rgba(1,1,1,0.1); border.width: 1
     
     opacity: active ? 1.0 : 0.0
-    scale: active ? 1.0 : 0.9
-    Behavior on opacity { NumberAnimation { duration: 300 } }
-    Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
+    scale: active ? 1.0 : 0.95
+    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+    Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
     
     ColumnLayout {
         anchors.fill: parent
