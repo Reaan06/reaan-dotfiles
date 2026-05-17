@@ -20,7 +20,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: root.launcherOpen ? (launcher.height + 200) : 120
+        height: root.launcherOpen ? (launcher.height + 200) : (root.active ? 120 : 10)
         hoverEnabled: true
         acceptedButtons: Qt.NoButton 
     }
