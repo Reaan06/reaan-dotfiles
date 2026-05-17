@@ -288,8 +288,8 @@ ShellRoot {
             // Altura dinámica: 
             // - 600 si el launcher está abierto (para evitar recortes en la sombra/escala)
             // - 100 si el dock está desplegado
-            // - 40 si está en modo "notch" (oculto)
-            implicitHeight: dm.launcherOpen ? 600 : (dm.active ? 100 : 40)
+            // - 10 si está en modo "notch" (oculto)
+            implicitHeight: dm.launcherOpen ? 600 : (dm.active ? 100 : 10)
             
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
