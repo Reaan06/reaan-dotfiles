@@ -16,11 +16,31 @@ Rectangle {
     property bool isActive: false
     property bool isPinned: false
     property color accentColor: "#89b4fa"
+    property bool isFocused: false
     
     signal pinToggled()
+    signal actionExecuted()
     
+    function triggerAction() {
+        root.scale = 0.9
+        clickAnimation.start()
+        
+        if (root.isActive) {
+            execFocus.command = ["/usr/bin/hyprctl", "dispatch", "focuswindow", root.appClass]
+            execFocus.running = true
+        } else {
+            var fallback = "grep -rilm1 '" + root.execCmd + "' /usr/share/applications/ ~/.local/share/applications/ 2>/dev/null | head -1 | xargs grep -oP 'Exec=\\K[^%]*' | head -1"
+            var cmd = "/usr/bin/hyprctl dispatch exec " + root.execCmd + " || $(" + fallback + ") &"
+            execLaunch.command = ["sh", "-c", cmd]
+            execLaunch.running = true
+        }
+        root.actionExecuted()
+    }
+
     width: 48; height: 48; radius: 12
-    color: mouseArea.containsMouse ? Qt.rgba(1,1,1,0.1) : "transparent"
+    color: (mouseArea.containsMouse || root.isFocused) ? Qt.rgba(1,1,1,0.15) : "transparent"
+    border.color: root.isFocused ? root.accentColor : "transparent"
+    border.width: root.isFocused ? 2 : 0
     
     Behavior on color { ColorAnimation { duration: 200 } }
     
@@ -35,7 +55,7 @@ Rectangle {
         }
         fillMode: Image.PreserveAspectFit
         
-        scale: mouseArea.containsMouse ? 1.2 : 1.0
+        scale: (mouseArea.containsMouse || root.isFocused) ? 1.2 : 1.0
         Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
     }
     
@@ -57,7 +77,7 @@ Rectangle {
         width: 20; height: 20; radius: 10
         color: root.isPinned ? shellRoot.cMauve : Qt.rgba(0,0,0,0.5)
         border.color: Qt.rgba(1,1,1,0.2); border.width: 1
-        visible: mouseArea.containsMouse
+        visible: mouseArea.containsMouse || root.isFocused
         z: 10
         
         Text {
@@ -84,21 +104,7 @@ Rectangle {
                 root.pinToggled()
                 return;
             }
-            
-            root.scale = 0.9
-            clickAnimation.start()
-            
-            if (root.isActive) {
-                // Focus window via hyprctl
-                execFocus.command = ["/usr/bin/hyprctl", "dispatch", "focuswindow", root.appClass]
-                execFocus.running = true
-            } else {
-                // Lanzar app - Intentar hyprctl exec primero, luego buscar el .desktop como fallback
-                var fallback = "grep -rilm1 '" + root.execCmd + "' /usr/share/applications/ ~/.local/share/applications/ 2>/dev/null | head -1 | xargs grep -oP 'Exec=\\K[^%]*' | head -1"
-                var cmd = "/usr/bin/hyprctl dispatch exec " + root.execCmd + " || $(" + fallback + ") &"
-                execLaunch.command = ["sh", "-c", cmd]
-                execLaunch.running = true
-            }
+            root.triggerAction()
         }
     }
     

@@ -17,6 +17,8 @@ ShellRoot {
     property string audioManagerMonitor: ""
     property bool superF2Visible: false
     property string superF2Monitor: ""
+    property bool dockVisible: false
+    property string dockMonitor: ""
     property bool btVisible: false
     property string btMonitor: ""
     property bool amAnimating: false
@@ -24,6 +26,7 @@ ShellRoot {
     property bool btAnimating: false
     property string _lastAmState: ""
     property string _lastF2State: ""
+    property string _lastDockState: ""
     property string _lastBtState: ""
 
     // ── Global Palette ──
@@ -74,15 +77,16 @@ ShellRoot {
 
     Process {
         id: amStateProc
-        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null"]
+        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-dock-toggle 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var parts = text.trim().split("---")
-                if (parts.length < 3) return
+                if (parts.length < 4) return
                 
                 var amRawFull = parts[0].trim()
                 var f2RawFull = parts[1].trim()
-                var btRawFull = parts[2].trim()
+                var dockRawFull = parts[2].trim()
+                var btRawFull = parts[3].trim()
 
                 if (amRawFull !== _lastAmState) {
                     _lastAmState = amRawFull
@@ -103,6 +107,13 @@ ShellRoot {
                     if (!newValF2 && superF2Visible) { f2Animating = true; f2HideTimer.start() }
                     else if (newValF2) { f2Animating = false; f2HideTimer.stop() }
                     superF2Visible = newValF2
+                }
+                if (dockRawFull !== _lastDockState) {
+                    _lastDockState = dockRawFull
+                    var dockParts = dockRawFull.split(" ")
+                    var dockRaw = dockParts[0]
+                    dockMonitor = dockParts.length > 1 ? dockParts[1] : ""
+                    dockVisible = (dockRaw === "visible")
                 }
                 if (btRawFull !== _lastBtState) {
                     _lastBtState = btRawFull
@@ -277,7 +288,7 @@ ShellRoot {
             
             anchors.bottom: true
             anchors.left: true
-            focusable: dm.launcherOpen
+            focusable: true
             
             // Centrado dinámico basado en el ancho real
             margins.left: (screen.width - implicitWidth) / 2
@@ -291,12 +302,16 @@ ShellRoot {
             // - 10 si está en modo "notch" (oculto)
             implicitHeight: dm.launcherOpen ? 600 : (dm.active ? 100 : 10)
             
-            exclusionMode: ExclusionMode.Ignore
+            exclusionMode: dm.active ? ExclusionMode.Exclusive : ExclusionMode.Ignore
+            
+            WlrLayershell.keyboardFocus: dm.active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            
             color: "transparent"
             
             DockManager { 
                 id: dm
                 anchors.fill: parent 
+                externalActive: (dockVisible && screen.name === dockMonitor)
             }
         }
     }

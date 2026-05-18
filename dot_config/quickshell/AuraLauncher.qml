@@ -8,7 +8,7 @@ import Quickshell.Io
  * AuraLauncher.qml
  * Compact but generous application launcher.
  */
-Rectangle {
+FocusScope {
     id: root
     property bool active: false
     property var allApps: []
@@ -17,6 +17,55 @@ Rectangle {
     property var usageData: ({})
     property var hiddenApps: []
     property string filter: ""
+    
+    focus: root.active
+
+    onActiveChanged: {
+        if (active) {
+            focusTimer.start();
+        } else {
+            searchInput.text = "";
+            root.filter = "";
+        }
+    }
+
+    Timer {
+        id: focusTimer
+        interval: 10
+        onTriggered: {
+            appGrid.currentIndex = 0;
+            searchInput.forceActiveFocus();
+        }
+    }
+
+    function launchApp(model) {
+        if (!model) return;
+        var appClass = model.class || model.name;
+        if (root.activeApps[appClass]) {
+            focusProcess.command = ["/usr/bin/hyprctl", "dispatch", "focuswindow", appClass];
+            focusProcess.running = true;
+        } else {
+            var cmd = ["sh", "-c", "/usr/bin/hyprctl dispatch exec " + appClass + " || " + model.exec + " &"];
+            execApp.command = cmd;
+            execApp.running = true;
+        }
+        root.active = false;
+        hidePanelProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+        hidePanelProc.running = true;
+    }
+
+    function togglePin(appClass) {
+        var currentPinned = Array.from(root.pinnedApps);
+        var idx = currentPinned.indexOf(appClass);
+        if (idx === -1) {
+            currentPinned.push(appClass);
+        } else {
+            currentPinned.splice(idx, 1);
+        }
+        root.pinnedApps = currentPinned;
+        pinProcess.command = ["sh", "-c", "python3 $HOME/.config/scripts/pin_app.py " + appClass];
+        pinProcess.running = true;
+    }
     
     // Modelo interno para evitar saltos de scroll
     ListModel { id: filteredModel }
@@ -53,6 +102,10 @@ Rectangle {
                 }
             }
         }
+        
+        if (appGrid.currentIndex === -1 && filteredModel.count > 0) {
+            appGrid.currentIndex = 0;
+        }
     }
 
     onAllAppsChanged: updateModel()
@@ -60,8 +113,11 @@ Rectangle {
     onFilterChanged: updateModel()
     onUsageDataChanged: updateModel()
     
-    radius: 24; color: shellRoot.cPill
-    border.color: Qt.rgba(1,1,1,0.1); border.width: 1
+    Rectangle {
+        anchors.fill: parent
+        radius: 24; color: shellRoot.cPill
+        border.color: Qt.rgba(1,1,1,0.1); border.width: 1
+    }
     
     opacity: active ? 1.0 : 0.0
     scale: active ? 1.0 : 0.95
@@ -96,16 +152,19 @@ Rectangle {
                 border.width: 1
             }
             onTextChanged: root.filter = text.toLowerCase()
-            
-            Connections {
-                target: root
-                function onActiveChanged() {
-                    if (root.active) {
-                        searchInput.forceActiveFocus()
-                    } else {
-                        searchInput.text = ""
-                        root.filter = ""
+
+            Keys.onPressed: (event) => {
+                if (event.key === Qt.Key_Down) {
+                    appGrid.forceActiveFocus();
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    if (appGrid.count > 0) {
+                        root.launchApp(filteredModel.get(0));
                     }
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Escape) {
+                    root.active = false;
+                    event.accepted = true;
                 }
             }
         }
@@ -130,6 +189,35 @@ Rectangle {
             cellHeight: 110
             
             model: filteredModel
+            currentIndex: 0
+            highlightFollowsCurrentItem: true
+            keyNavigationEnabled: true
+            focus: true
+
+            Keys.onPressed: (event) => {
+                if (event.key === Qt.Key_Up && appGrid.currentIndex < 5) {
+                    searchInput.forceActiveFocus();
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    if (appGrid.currentIndex >= 0) {
+                        root.launchApp(filteredModel.get(appGrid.currentIndex));
+                    }
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Space) {
+                    if (appGrid.currentIndex >= 0) {
+                        var item = filteredModel.get(appGrid.currentIndex);
+                        root.togglePin(item.class || item.name);
+                    }
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Escape) {
+                    root.active = false;
+                    event.accepted = true;
+                } else if (event.text.length > 0 && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Space && event.key !== Qt.Key_Escape && event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backspace) {
+                    searchInput.forceActiveFocus();
+                    searchInput.text += event.text;
+                    event.accepted = true;
+                }
+            }
             
             delegate: Item {
                 width: appGrid.cellWidth
@@ -139,7 +227,11 @@ Rectangle {
                     id: appDelegate
                     anchors.centerIn: parent
                     width: 80; height: 100; radius: 12
-                    color: ma.containsMouse ? Qt.rgba(1,1,1,0.08) : "transparent"
+                    
+                    property bool isFocused: GridView.isCurrentItem && appGrid.activeFocus
+                    color: (ma.containsMouse || isFocused) ? Qt.rgba(1,1,1,0.15) : "transparent"
+                    border.color: isFocused ? shellRoot.cMauve : "transparent"
+                    border.width: isFocused ? 2 : 0
                     
                     readonly property string appClass: model.class || model.name
                     readonly property bool isPinned: root.pinnedApps.includes(appDelegate.appClass)
@@ -147,15 +239,7 @@ Rectangle {
                     MouseArea {
                         id: ma; anchors.fill: parent; hoverEnabled: true
                         onClicked: {
-                            var appClass = appDelegate.appClass
-                            if (root.activeApps[appClass]) {
-                                focusProcess.command = ["/usr/bin/hyprctl", "dispatch", "focuswindow", appClass]
-                                focusProcess.running = true
-                            } else {
-                                var cmd = ["sh", "-c", "/usr/bin/hyprctl dispatch exec " + appClass + " || " + model.exec + " &"]
-                                execApp.command = cmd; execApp.running = true
-                            }
-                            root.active = false
+                            root.launchApp(model);
                         }
                     }
                     
@@ -190,7 +274,7 @@ Rectangle {
                                 width: 22; height: 22; radius: 11
                                 color: appDelegate.isPinned ? shellRoot.cMauve : Qt.rgba(0,0,0,0.3)
                                 border.color: Qt.rgba(1,1,1,0.1); border.width: 1
-                                visible: ma.containsMouse || appDelegate.isPinned
+                                visible: ma.containsMouse || appDelegate.isPinned || appDelegate.isFocused
                                 
                                 Text {
                                     anchors.centerIn: parent
@@ -202,19 +286,7 @@ Rectangle {
                                 MouseArea {
                                     anchors.fill: parent
                                     onClicked: {
-                                        var appClass = appDelegate.appClass;
-                                        // Pin instantáneo en la UI creando un NUEVO array
-                                        var currentPinned = Array.from(root.pinnedApps);
-                                        var idx = currentPinned.indexOf(appClass);
-                                        if (idx === -1) {
-                                            currentPinned.push(appClass);
-                                        } else {
-                                            currentPinned.splice(idx, 1);
-                                        }
-                                        root.pinnedApps = currentPinned; // Esto dispara la señal onPinnedAppsChanged
-                                        
-                                        pinProcess.command = ["sh", "-c", "python3 $HOME/.config/scripts/pin_app.py " + appClass]
-                                        pinProcess.running = true
+                                        root.togglePin(appDelegate.appClass);
                                     }
                                 }
                             }
@@ -239,4 +311,5 @@ Rectangle {
     Process { id: execApp }
     Process { id: pinProcess }
     Process { id: focusProcess }
+    Process { id: hidePanelProc }
 }

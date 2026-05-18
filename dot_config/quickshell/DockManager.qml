@@ -7,14 +7,97 @@ import Quickshell.Io
  * DockManager.qml
  * Main orchestration for the Antigravity Dock.
  */
-Item {
+FocusScope {
     id: root
     property bool active: false // Desplegado
+    property bool externalActive: false
+    
+    onExternalActiveChanged: {
+        if (externalActive) {
+            root.active = true;
+            showTimer.stop();
+            hideTimer.stop();
+        } else if (!isHovered && !launcherOpen) {
+            root.active = false;
+        }
+    }
+
     property var pinnedApps: []
     property var hiddenApps: []
     property var activeApps: ({})
     property var rawUsage: ({})
     
+    // Keyboard navigation
+    property int focusedIndex: -1
+    readonly property int totalItems: 1 + topAppsCount + pinnedApps.length + activeAppsCount
+    property int topAppsCount: 0
+    property int activeAppsCount: 0
+
+    focus: true
+
+    Keys.onPressed: (event) => {
+        if (!root.active || launcher.active) return;
+        
+        if (event.key === Qt.Key_Left) {
+            if (focusedIndex > 0) focusedIndex--;
+            else focusedIndex = totalItems - 1;
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Right) {
+            if (focusedIndex < totalItems - 1) focusedIndex++;
+            else focusedIndex = 0;
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            triggerIndex(focusedIndex);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Space) {
+            togglePinAtIndex(focusedIndex);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Escape) {
+            root.hideDock();
+            event.accepted = true;
+        }
+    }
+
+    function hideDock() {
+        root.active = false;
+        mProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+        mProc.running = true;
+    }
+
+    function triggerIndex(idx) {
+        if (idx === 0) {
+            launcher.active = !launcher.active;
+            if (launcher.active) launcher.forceActiveFocus();
+        } else {
+            root.executeIndex(idx);
+        }
+    }
+
+    signal executeIndex(int idx)
+    signal pinIndex(int idx)
+
+    onActiveChanged: {
+        if (active) {
+            focusedIndex = 0;
+            root.forceActiveFocus();
+        } else {
+            focusedIndex = -1;
+        }
+    }
+
+    onLauncherOpenChanged: {
+        if (launcherOpen) {
+            hideTimer.stop()
+            root.active = true
+            // Solicitar foco para la ventana del panel para permitir escritura
+            if (root.Window.window) root.Window.window.requestActivate()
+            launcher.forceActiveFocus()
+        } else {
+            if (!isHovered) hideTimer.start()
+            root.forceActiveFocus()
+        }
+    }
+
     MouseArea {
         id: mouseCollector
         anchors.left: parent.left
@@ -86,7 +169,38 @@ Item {
                 }
             }
             root.rawUsage = usage
+            
+            // Update counts for navigation
+            updateNavigationCounts();
         } catch(e) { console.log("Dock topApps error: " + e) }
+    }
+
+    function updateNavigationCounts() {
+        var tc = 0;
+        for (var i = 0; i < topAppsModel.count; i++) {
+            var item = topAppsModel.get(i)
+            if (root.pinnedApps.indexOf(item.name) === -1 && root.hiddenApps.indexOf(item.name) === -1) {
+                tc++;
+                if (tc >= 7) break;
+            }
+        }
+        root.topAppsCount = tc;
+        
+        var ac = Object.keys(root.activeApps).filter(a => {
+            if (root.pinnedApps.includes(a)) return false;
+            for (var i = 0; i < topAppsModel.count; i++) {
+                if (topAppsModel.get(i).name === a) return false;
+            }
+            return true;
+        }).length;
+        root.activeAppsCount = ac;
+    }
+
+    onPinnedAppsChanged: updateNavigationCounts()
+    onActiveAppsChanged: updateNavigationCounts()
+
+    function togglePinAtIndex(idx) {
+        root.pinIndex(idx);
     }
 
     Process { id: appLauncher }
@@ -101,18 +215,6 @@ Item {
         } else {
             showTimer.stop()
             if (!root.launcherOpen) hideTimer.start()
-        }
-    }
-    
-    // Mantener activo si el launcher está abierto
-    onLauncherOpenChanged: {
-        if (launcherOpen) {
-            hideTimer.stop()
-            root.active = true
-            // Solicitar foco para la ventana del panel para permitir escritura
-            if (root.Window.window) root.Window.window.requestActivate()
-        } else {
-            if (!isHovered) hideTimer.start()
         }
     }
     
@@ -280,6 +382,9 @@ Item {
             // Launcher Button
             Rectangle {
                 width: 44; height: 44; radius: 22; color: Qt.rgba(1,1,1,0.05)
+                property bool isFocused: root.focusedIndex === 0
+                border.color: isFocused ? shellRoot.cMauve : "transparent"
+                border.width: isFocused ? 2 : 0
                 Text { anchors.centerIn: parent; text: "󰀻"; color: shellRoot.cMauve; font.pixelSize: 20 }
                 MouseArea { anchors.fill: parent; onClicked: launcher.active = !launcher.active }
             }
@@ -301,6 +406,7 @@ Item {
                     return filtered
                 }
                 DockItem {
+                    id: topItem
                     name: modelData.name
                     iconName: modelData.icon
                     execCmd: modelData.name
@@ -309,15 +415,29 @@ Item {
                     isPinned: false // Son apps por uso
                     accentColor: shellRoot.cTeal
                     onPinToggled: root.toggleHide(appClass) // Para apps de uso, el botón las oculta
+                    
+                    isFocused: root.focusedIndex === (1 + index)
+                    onActionExecuted: {
+                        root.active = false;
+                        mProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+                        mProc.running = true;
+                    }
+                    
+                    Connections {
+                        target: root
+                        function onExecuteIndex(idx) { if (idx === (1 + index)) topItem.triggerAction() }
+                        function onPinIndex(idx) { if (idx === (1 + index)) root.toggleHide(appClass) }
+                    }
                 }
             }
 
-            Rectangle { width: 1; height: 28; color: Qt.rgba(1,1,1,0.08); visible: topAppsModel.count > 0 }
+            Rectangle { width: 1; height: 28; color: Qt.rgba(1,1,1,0.08); visible: root.topAppsCount > 0 }
 
             // Pinned & Active Apps
             Repeater {
                 model: root.pinnedApps
                 DockItem {
+                    id: pinnedItem
                     appClass: modelData
                     iconName: root.getIconForClass(modelData)
                     execCmd: modelData
@@ -325,12 +445,25 @@ Item {
                     isPinned: true
                     accentColor: shellRoot.cBlue
                     onPinToggled: root.togglePin(appClass)
+                    
+                    isFocused: root.focusedIndex === (1 + root.topAppsCount + index)
+                    onActionExecuted: {
+                        root.active = false;
+                        mProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+                        mProc.running = true;
+                    }
+                    
+                    Connections {
+                        target: root
+                        function onExecuteIndex(idx) { if (idx === (1 + root.topAppsCount + index)) pinnedItem.triggerAction() }
+                        function onPinIndex(idx) { if (idx === (1 + root.topAppsCount + index)) root.togglePin(appClass) }
+                    }
                 }
             }
 
             Rectangle { 
                 width: 1; height: 28; color: Qt.rgba(1,1,1,0.08)
-                visible: root.pinnedApps.length > 0 && Object.keys(root.activeApps).filter(a => !root.pinnedApps.includes(a)).length > 0
+                visible: root.pinnedApps.length > 0 && root.activeAppsCount > 0
             }
 
             Repeater {
@@ -343,12 +476,26 @@ Item {
                     return true;
                 })
                 DockItem {
+                    id: activeItem
                     appClass: modelData
                     iconName: root.getIconForClass(modelData)
                     isActive: true
                     isPinned: false
                     accentColor: shellRoot.cMauve
                     onPinToggled: root.togglePin(appClass)
+                    
+                    isFocused: root.focusedIndex === (1 + root.topAppsCount + root.pinnedApps.length + index)
+                    onActionExecuted: {
+                        root.active = false;
+                        mProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+                        mProc.running = true;
+                    }
+                    
+                    Connections {
+                        target: root
+                        function onExecuteIndex(idx) { if (idx === (1 + root.topAppsCount + root.pinnedApps.length + index)) activeItem.triggerAction() }
+                        function onPinIndex(idx) { if (idx === (1 + root.topAppsCount + root.pinnedApps.length + index)) root.togglePin(appClass) }
+                    }
                 }
             }
         }
@@ -376,9 +523,16 @@ Item {
         activeApps: root.activeApps
         usageData: root.rawUsage
         hiddenApps: root.hiddenApps
+        
+        onActiveChanged: {
+            if (!active) {
+                root.forceActiveFocus();
+            }
+        }
     }
     
     Process { id: pinProcess }
     Process { id: hideProcess }
     Process { id: focusProcess }
+    Process { id: mProc }
 }
