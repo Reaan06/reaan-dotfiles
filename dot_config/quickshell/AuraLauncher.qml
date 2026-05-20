@@ -34,7 +34,7 @@ FocusScope {
         interval: 10
         onTriggered: {
             appGrid.currentIndex = 0;
-            searchInput.forceActiveFocus();
+            appGrid.forceActiveFocus();
         }
     }
 
@@ -151,15 +151,22 @@ FocusScope {
                 border.color: Qt.rgba(1,1,1,0.2)
                 border.width: 1
             }
-            onTextChanged: root.filter = text.toLowerCase()
+            onTextChanged: {
+                root.filter = text.toLowerCase();
+                appGrid.currentIndex = 0;
+            }
 
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Down) {
                     appGrid.forceActiveFocus();
+                    appGrid.moveCurrentIndexDown();
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Up) {
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     if (appGrid.count > 0) {
-                        root.launchApp(filteredModel.get(0));
+                        var idx = appGrid.currentIndex >= 0 ? appGrid.currentIndex : 0;
+                        root.launchApp(filteredModel.get(idx));
                     }
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Escape) {
@@ -195,7 +202,8 @@ FocusScope {
             focus: true
 
             Keys.onPressed: (event) => {
-                if (event.key === Qt.Key_Up && appGrid.currentIndex < 5) {
+                var columns = Math.max(1, Math.floor(appGrid.width / appGrid.cellWidth));
+                if (event.key === Qt.Key_Up && appGrid.currentIndex < columns) {
                     searchInput.forceActiveFocus();
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -211,6 +219,12 @@ FocusScope {
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Escape) {
                     root.active = false;
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Backspace) {
+                    searchInput.forceActiveFocus();
+                    if (searchInput.text.length > 0) {
+                        searchInput.text = searchInput.text.substring(0, searchInput.text.length - 1);
+                    }
                     event.accepted = true;
                 } else if (event.text.length > 0 && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Space && event.key !== Qt.Key_Escape && event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backspace) {
                     searchInput.forceActiveFocus();
@@ -228,7 +242,7 @@ FocusScope {
                     anchors.centerIn: parent
                     width: 80; height: 100; radius: 12
                     
-                    property bool isFocused: GridView.isCurrentItem && appGrid.activeFocus
+                    property bool isFocused: GridView.isCurrentItem
                     color: (ma.containsMouse || isFocused) ? Qt.rgba(1,1,1,0.15) : "transparent"
                     border.color: isFocused ? shellRoot.cMauve : "transparent"
                     border.width: isFocused ? 2 : 0

@@ -69,8 +69,8 @@ Item {
                     var pc = parts[0]
                     if (pc && pc.startsWith("#") && pc.length >= 7) {
                         root.cPill = Qt.rgba(parseInt(pc.substr(1,2),16)/255,
-                                             parseInt(pc.substr(3,2),16)/255,
-                                             parseInt(pc.substr(5,2),16)/255, 0.92)
+                                            parseInt(pc.substr(3,2),16)/255,
+                                            parseInt(pc.substr(5,2),16)/255, 0.92)
                     }
                     root.cTeal   = parts[1] || root.cTeal
                     root.cYellow = parts[4] || root.cYellow
