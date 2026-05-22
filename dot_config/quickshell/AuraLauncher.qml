@@ -31,7 +31,7 @@ FocusScope {
 
     Timer {
         id: focusTimer
-        interval: 10
+        interval: 50
         onTriggered: {
             appGrid.currentIndex = 0;
             appGrid.forceActiveFocus();
@@ -45,8 +45,8 @@ FocusScope {
             focusProcess.command = ["/usr/bin/hyprctl", "dispatch", "focuswindow", appClass];
             focusProcess.running = true;
         } else {
-            var cmd = ["sh", "-c", "/usr/bin/hyprctl dispatch exec " + appClass + " || " + model.exec + " &"];
-            execApp.command = cmd;
+            var execStr = model.exec ? model.exec : appClass;
+            execApp.command = ["/usr/bin/hyprctl", "dispatch", "exec", execStr];
             execApp.running = true;
         }
         root.active = false;
@@ -105,6 +105,7 @@ FocusScope {
         
         if (appGrid.currentIndex === -1 && filteredModel.count > 0) {
             appGrid.currentIndex = 0;
+            if (root.active) appGrid.forceActiveFocus();
         }
     }
 
@@ -159,9 +160,13 @@ FocusScope {
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Down) {
                     appGrid.forceActiveFocus();
-                    appGrid.moveCurrentIndexDown();
+                    // Do not move index down immediately, just transfer focus to the grid
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Up) {
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Right && cursorPosition === text.length) {
+                    appGrid.forceActiveFocus();
+                    appGrid.moveCurrentIndexRight();
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     if (appGrid.count > 0) {
@@ -203,8 +208,21 @@ FocusScope {
 
             Keys.onPressed: (event) => {
                 var columns = Math.max(1, Math.floor(appGrid.width / appGrid.cellWidth));
-                if (event.key === Qt.Key_Up && appGrid.currentIndex < columns) {
-                    searchInput.forceActiveFocus();
+                if (event.key === Qt.Key_Up) {
+                    if (appGrid.currentIndex < columns) {
+                        searchInput.forceActiveFocus();
+                    } else {
+                        appGrid.moveCurrentIndexUp();
+                    }
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Down) {
+                    appGrid.moveCurrentIndexDown();
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Left) {
+                    appGrid.moveCurrentIndexLeft();
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Right) {
+                    appGrid.moveCurrentIndexRight();
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     if (appGrid.currentIndex >= 0) {
@@ -226,7 +244,7 @@ FocusScope {
                         searchInput.text = searchInput.text.substring(0, searchInput.text.length - 1);
                     }
                     event.accepted = true;
-                } else if (event.text.length > 0 && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Space && event.key !== Qt.Key_Escape && event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backspace) {
+                } else if (event.text.length > 0 && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Space && event.key !== Qt.Key_Escape && event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backspace && event.key !== Qt.Key_Left && event.key !== Qt.Key_Right && event.key !== Qt.Key_Up && event.key !== Qt.Key_Down) {
                     searchInput.forceActiveFocus();
                     searchInput.text += event.text;
                     event.accepted = true;
@@ -242,7 +260,7 @@ FocusScope {
                     anchors.centerIn: parent
                     width: 80; height: 100; radius: 12
                     
-                    property bool isFocused: GridView.isCurrentItem
+                    property bool isFocused: appGrid.currentIndex === index
                     color: (ma.containsMouse || isFocused) ? Qt.rgba(1,1,1,0.15) : "transparent"
                     border.color: isFocused ? shellRoot.cMauve : "transparent"
                     border.width: isFocused ? 2 : 0
