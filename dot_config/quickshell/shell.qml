@@ -287,22 +287,28 @@ ShellRoot {
             screen: modelData
             
             anchors.bottom: true
+            // Cuando está inactivo, extendemos horizontalmente todo el ancho para
+            // capturar hover desde cualquier posición X en la franja inferior
             anchors.left: true
+            anchors.right: !dm.active
             focusable: true
             
-            // Centrado dinámico basado en el ancho real
-            margins.left: (screen.width - implicitWidth) / 2
+            // Centrado dinámico basado en el ancho real (solo cuando está activo)
+            margins.left: dm.active ? (screen.width - implicitWidth) / 2 : 0
+            margins.right: 0
             
             // Ancho dinámico: El ancho del dock + margen, pero NUNCA menor que el launcher si está abierto
             implicitWidth: Math.max(dm.dockWidth + 100, dm.launcherOpen ? 550 : 0)
             
-            // Altura dinámica: 
-            // - 600 si el launcher está abierto (para evitar recortes en la sombra/escala)
+            // Altura dinámica:
+            // - 600 si el launcher está abierto
             // - 100 si el dock está desplegado
-            // - 10 si está en modo "notch" (oculto)
-            implicitHeight: dm.launcherOpen ? 600 : (dm.active ? 100 : 10)
+            // - 30 si está en modo "notch" (zona de hover)
+            implicitHeight: dm.launcherOpen ? 600 : (dm.active ? 100 : 30)
             
-            exclusionMode: dm.active ? ExclusionMode.Exclusive : ExclusionMode.Ignore
+            // ExclusionMode.Normal cuando está inactivo permite que el compositor
+            // (Hyprland) envíe eventos de hover. ExclusionMode.Ignore los bloquea.
+            exclusionMode: dm.active ? ExclusionMode.Exclusive : ExclusionMode.Normal
             
             WlrLayershell.keyboardFocus: dm.active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             

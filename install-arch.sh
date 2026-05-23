@@ -85,7 +85,7 @@ CORE=(
     hyprland hyprlock hypridle hyprpaper
     xdg-desktop-portal-hyprland
 
-    # Shell (Quickshell reemplaza Waybar)
+    # Shell UI
     quickshell-git
 
     # Notificaciones

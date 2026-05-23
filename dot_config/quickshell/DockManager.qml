@@ -103,7 +103,7 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: root.launcherOpen ? (launcher.height + 200) : (root.active ? 120 : 10)
+        height: root.launcherOpen ? (launcher.height + 200) : (root.active ? 120 : 30)
         hoverEnabled: true
         acceptedButtons: Qt.NoButton 
     }
@@ -212,7 +212,7 @@ FocusScope {
         }
     }
     
-    Timer { id: showTimer; interval: 50; onTriggered: root.active = true }
+    Timer { id: showTimer; interval: 2000; onTriggered: root.active = true }
     Timer { id: hideTimer; interval: 1000; onTriggered: if (!root.launcherOpen && !root.isHovered) root.active = false }
 
     function loadPinned() {

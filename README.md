@@ -17,7 +17,7 @@ Este repositorio contiene la configuración del sistema personal (*dotfiles*) pa
 ```text
 /home/reaan/reaan-dotfiles/
 ├── conductor/           # Planes de trabajo y gestión de proyectos
-├── dot_config/          # Configuraciones de aplicaciones (Hyprland, Waybar, etc.)
+├── dot_config/          # Configuraciones de aplicaciones (Hyprland, Quickshell, etc.)
 ├── eq-service/          # Servicio Rust para ecualización de audio
 ├── scripts/             # Scripts de automatización y utilidades
 └── wallps/              # Fondos de pantalla
@@ -25,7 +25,7 @@ Este repositorio contiene la configuración del sistema personal (*dotfiles*) pa
 
 ## Conceptos Clave
 - **Hyprland**: Gestor de ventanas principal (Wayland).
-- **Qml/Quickshell**: Interfaz de usuario para widgets de escritorio.
+- **Quickshell**: Shell de escritorio principal — barra de estado, dock, OSD y paneles.
 - **eq-service**: Servicio desarrollado en Rust para control de ecualización.
 
 ## Protocolos Operativos
