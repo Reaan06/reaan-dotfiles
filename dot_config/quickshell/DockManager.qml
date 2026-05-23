@@ -186,13 +186,7 @@ FocusScope {
         }
         root.topAppsCount = tc;
         
-        var ac = Object.keys(root.activeApps).filter(a => {
-            if (root.pinnedApps.includes(a)) return false;
-            for (var i = 0; i < topAppsModel.count; i++) {
-                if (topAppsModel.get(i).name === a) return false;
-            }
-            return true;
-        }).length;
+        var ac = Object.keys(root.activeApps).filter(root.shouldShowInActive).length;
         root.activeAppsCount = ac;
     }
 
@@ -294,6 +288,161 @@ FocusScope {
         }
         
         return lowerClass;
+    }
+
+    function findAppInfo(id) {
+        if (!id) return null;
+        var lowerId = id.toLowerCase().trim();
+        
+        var overrides = {
+            "visual-studio-code": "code",
+            "visual studio code": "code",
+            "vscodium": "codium",
+            "brave-browser": "brave",
+            "google-chrome": "chrome",
+            "org.vinegarhq.sober": "sober"
+        };
+        
+        var resolvedId = overrides[lowerId] || lowerId;
+
+        // 1. Match by class (StartupWMClass)
+        for (var i = 0; i < root.allApps.length; i++) {
+            var app = root.allApps[i];
+            var appClass = (app.class || "").toLowerCase();
+            if (appClass === lowerId || appClass === resolvedId) return app;
+        }
+        // 2. Match by name
+        for (var j = 0; j < root.allApps.length; j++) {
+            var a = root.allApps[j];
+            var appName = (a.name || "").toLowerCase();
+            if (appName === lowerId || appName === resolvedId) return a;
+        }
+        // 3. Match by exec binary name
+        for (var k = 0; k < root.allApps.length; k++) {
+            var ap = root.allApps[k];
+            var appExec = (ap.exec || "").toLowerCase();
+            var binary = appExec.split(" ")[0].split("/").pop();
+            if (binary === lowerId || binary === resolvedId || appExec.indexOf(lowerId) !== -1) return ap;
+        }
+        return null;
+    }
+
+    function isAppActive(id) {
+        if (!id) return false;
+        var lowerId = id.toLowerCase().trim();
+        
+        var classMap = {
+            "visual-studio-code": "code",
+            "visual studio code": "code",
+            "vscodium": "codium",
+            "google-chrome": "google-chrome",
+            "brave-browser": "brave-browser",
+            "org.vinegarhq.sober": "sober"
+        };
+        
+        var resolvedClass = classMap[lowerId] || lowerId;
+        
+        var appInfo = findAppInfo(id);
+        var appWMClass = appInfo ? (appInfo.class || "").toLowerCase() : "";
+
+        var activeKeys = Object.keys(root.activeApps);
+        for (var i = 0; i < activeKeys.length; i++) {
+            var activeClass = activeKeys[i].toLowerCase();
+            if (activeClass === lowerId || 
+                activeClass === resolvedClass || 
+                (appWMClass && activeClass === appWMClass)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function getAppClassForFocus(id) {
+        if (!id) return "";
+        var lowerId = id.toLowerCase().trim();
+        
+        var classMap = {
+            "visual-studio-code": "code",
+            "visual studio code": "code",
+            "vscodium": "codium",
+            "google-chrome": "google-chrome",
+            "brave-browser": "brave-browser",
+            "org.vinegarhq.sober": "sober"
+        };
+        
+        var resolvedClass = classMap[lowerId] || lowerId;
+        
+        var appInfo = findAppInfo(id);
+        var appWMClass = appInfo ? (appInfo.class || "").toLowerCase() : "";
+
+        var activeKeys = Object.keys(root.activeApps);
+        for (var i = 0; i < activeKeys.length; i++) {
+            var activeClass = activeKeys[i];
+            var activeClassLower = activeClass.toLowerCase();
+            if (activeClassLower === lowerId || 
+                activeClassLower === resolvedClass || 
+                (appWMClass && activeClassLower === appWMClass)) {
+                return activeClass;
+            }
+        }
+        if (appInfo && appInfo.class) return appInfo.class;
+        return id;
+    }
+
+    function getExecForClass(id) {
+        if (!id) return "";
+        var lowerClass = id.toLowerCase().trim();
+        
+        // Manual direct mapping overrides
+        if (lowerClass === "sober" || lowerClass === "org.vinegarhq.sober")
+            return "flatpak run org.vinegarhq.Sober";
+        if (lowerClass === "obsidian") return "obsidian";
+        if (lowerClass === "llauncher") return "llauncher";
+        
+        var appInfo = findAppInfo(id);
+        if (appInfo && appInfo.exec) return appInfo.exec;
+        
+        var classMap = {
+            "visual-studio-code": "code",
+            "visual studio code": "code",
+            "vscodium": "codium",
+            "google-chrome": "google-chrome-stable",
+            "brave-browser": "brave-browser"
+        };
+        return classMap[lowerClass] || id.toLowerCase();
+    }
+
+    function shouldShowInActive(activeClass) {
+        if (!activeClass) return false;
+        var lowerActive = activeClass.toLowerCase();
+
+        // 1. Pinned apps
+        for (var i = 0; i < root.pinnedApps.length; i++) {
+            var pinned = root.pinnedApps[i].toLowerCase();
+            if (pinned === lowerActive) return false;
+            
+            var pinnedInfo = findAppInfo(pinned);
+            var activeInfo = findAppInfo(activeClass);
+            if (pinnedInfo && activeInfo && pinnedInfo.name === activeInfo.name) return false;
+        }
+
+        // 2. Top apps (first 7 shown)
+        var shownTopCount = 0;
+        for (var j = 0; j < topAppsModel.count; j++) {
+            var topItem = topAppsModel.get(j);
+            if (root.pinnedApps.indexOf(topItem.name) === -1 && root.hiddenApps.indexOf(topItem.name) === -1) {
+                shownTopCount++;
+                if (shownTopCount <= 7) {
+                    var topName = topItem.name.toLowerCase();
+                    if (topName === lowerActive) return false;
+                    
+                    var topInfo = findAppInfo(topName);
+                    var activeInfo = findAppInfo(activeClass);
+                    if (topInfo && activeInfo && topInfo.name === activeInfo.name) return false;
+                }
+            }
+        }
+        return true;
     }
 
     Process {
@@ -409,9 +558,9 @@ FocusScope {
                     id: topItem
                     name: modelData.name
                     iconName: modelData.icon
-                    execCmd: modelData.name
-                    isActive: !!root.activeApps[modelData.name]
-                    appClass: modelData.name
+                    execCmd: root.getExecForClass(modelData.name)
+                    isActive: root.isAppActive(modelData.name)
+                    appClass: root.getAppClassForFocus(modelData.name)
                     isPinned: false // Son apps por uso
                     accentColor: shellRoot.cTeal
                     onPinToggled: root.toggleHide(appClass) // Para apps de uso, el botón las oculta
@@ -438,10 +587,10 @@ FocusScope {
                 model: root.pinnedApps
                 DockItem {
                     id: pinnedItem
-                    appClass: modelData
+                    appClass: root.getAppClassForFocus(modelData)
                     iconName: root.getIconForClass(modelData)
-                    execCmd: modelData
-                    isActive: !!root.activeApps[modelData]
+                    execCmd: root.getExecForClass(modelData)
+                    isActive: root.isAppActive(modelData)
                     isPinned: true
                     accentColor: shellRoot.cBlue
                     onPinToggled: root.togglePin(appClass)
@@ -467,18 +616,12 @@ FocusScope {
             }
 
             Repeater {
-                model: Object.keys(root.activeApps).filter(a => {
-                    // Evitar duplicados si ya está en pinned o en top apps
-                    if (root.pinnedApps.includes(a)) return false;
-                    for (var i = 0; i < topAppsModel.count; i++) {
-                        if (topAppsModel.get(i).name === a) return false;
-                    }
-                    return true;
-                })
+                model: Object.keys(root.activeApps).filter(root.shouldShowInActive)
                 DockItem {
                     id: activeItem
-                    appClass: modelData
+                    appClass: root.getAppClassForFocus(modelData)
                     iconName: root.getIconForClass(modelData)
+                    execCmd: root.getExecForClass(modelData)
                     isActive: true
                     isPinned: false
                     accentColor: shellRoot.cMauve

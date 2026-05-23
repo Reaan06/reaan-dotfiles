@@ -38,15 +38,125 @@ FocusScope {
         }
     }
 
+    function findAppInfo(id) {
+        if (!id) return null;
+        var lowerId = id.toLowerCase().trim();
+        
+        var overrides = {
+            "visual-studio-code": "code",
+            "visual studio code": "code",
+            "vscodium": "codium",
+            "brave-browser": "brave",
+            "google-chrome": "chrome",
+            "org.vinegarhq.sober": "sober"
+        };
+        
+        var resolvedId = overrides[lowerId] || lowerId;
+
+        // 1. Match by class (StartupWMClass)
+        for (var i = 0; i < root.allApps.length; i++) {
+            var app = root.allApps[i];
+            var appClass = (app.class || "").toLowerCase();
+            if (appClass === lowerId || appClass === resolvedId) return app;
+        }
+        // 2. Match by name
+        for (var j = 0; j < root.allApps.length; j++) {
+            var a = root.allApps[j];
+            var appName = (a.name || "").toLowerCase();
+            if (appName === lowerId || appName === resolvedId) return a;
+        }
+        // 3. Match by exec binary name
+        for (var k = 0; k < root.allApps.length; k++) {
+            var ap = root.allApps[k];
+            var appExec = (ap.exec || "").toLowerCase();
+            var binary = appExec.split(" ")[0].split("/").pop();
+            if (binary === lowerId || binary === resolvedId || appExec.indexOf(lowerId) !== -1) return ap;
+        }
+        return null;
+    }
+
+    function isAppActive(id) {
+        if (!id) return false;
+        var lowerId = id.toLowerCase().trim();
+        
+        var classMap = {
+            "visual-studio-code": "code",
+            "visual studio code": "code",
+            "vscodium": "codium",
+            "google-chrome": "google-chrome",
+            "brave-browser": "brave-browser",
+            "org.vinegarhq.sober": "sober"
+        };
+        
+        var resolvedClass = classMap[lowerId] || lowerId;
+        
+        var appInfo = findAppInfo(id);
+        var appWMClass = appInfo ? (appInfo.class || "").toLowerCase() : "";
+
+        var activeKeys = Object.keys(root.activeApps);
+        for (var i = 0; i < activeKeys.length; i++) {
+            var activeClass = activeKeys[i].toLowerCase();
+            if (activeClass === lowerId || 
+                activeClass === resolvedClass || 
+                (appWMClass && activeClass === appWMClass)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function getAppClassForFocus(id) {
+        if (!id) return "";
+        var lowerId = id.toLowerCase().trim();
+        
+        var classMap = {
+            "visual-studio-code": "code",
+            "visual studio code": "code",
+            "vscodium": "codium",
+            "google-chrome": "google-chrome",
+            "brave-browser": "brave-browser",
+            "org.vinegarhq.sober": "sober"
+        };
+        
+        var resolvedClass = classMap[lowerId] || lowerId;
+        
+        var appInfo = findAppInfo(id);
+        var appWMClass = appInfo ? (appInfo.class || "").toLowerCase() : "";
+
+        var activeKeys = Object.keys(root.activeApps);
+        for (var i = 0; i < activeKeys.length; i++) {
+            var activeClass = activeKeys[i];
+            var activeClassLower = activeClass.toLowerCase();
+            if (activeClassLower === lowerId || 
+                activeClassLower === resolvedClass || 
+                (appWMClass && activeClassLower === appWMClass)) {
+                return activeClass;
+            }
+        }
+        if (appInfo && appInfo.class) return appInfo.class;
+        return id;
+    }
+
     function launchApp(model) {
         if (!model) return;
         var appClass = model.class || model.name;
-        if (root.activeApps[appClass]) {
-            focusProcess.command = ["/usr/bin/hyprctl", "dispatch", "focuswindow", appClass];
+        if (isAppActive(appClass)) {
+            var focusClass = getAppClassForFocus(appClass);
+            focusProcess.command = ["/usr/bin/hyprctl", "dispatch", "focuswindow", focusClass];
             focusProcess.running = true;
         } else {
             var execStr = model.exec ? model.exec : appClass;
-            execApp.command = ["/usr/bin/hyprctl", "dispatch", "exec", execStr];
+            var cleanCmd = execStr.replace(/'/g, "'\\''");
+            var binCmd = cleanCmd.split(" ")[0];
+            var fallbackCmd = "grep -rilm1 '" + cleanCmd + "' /usr/share/applications/ ~/.local/share/applications/ 2>/dev/null | head -1 | xargs grep -oP 'Exec=\\\\K[^%]*' | head -1 | xargs";
+            var cmd = "if command -v '" + binCmd + "' >/dev/null 2>&1; then " +
+                      "/usr/bin/hyprctl dispatch exec '" + cleanCmd + "'; " +
+                      "else " +
+                      "fb=$(" + fallbackCmd + "); " +
+                      "if [ -n \"$fb\" ]; then /usr/bin/hyprctl dispatch exec \"$fb\"; " +
+                      "else /usr/bin/hyprctl dispatch exec '" + cleanCmd + "'; fi; " +
+                      "fi";
+            execApp.command = ["sh", "-c", cmd];
             execApp.running = true;
         }
         root.active = false;

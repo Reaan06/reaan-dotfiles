@@ -21,6 +21,24 @@ Rectangle {
     signal pinToggled()
     signal actionExecuted()
     
+    function forceLaunch() {
+        root.scale = 0.9
+        clickAnimation.start()
+        
+        var cleanCmd = root.execCmd.replace(/'/g, "'\\''");
+        var binCmd = cleanCmd.split(" ")[0];
+        var fallbackCmd = "grep -rilm1 '" + cleanCmd + "' /usr/share/applications/ ~/.local/share/applications/ 2>/dev/null | head -1 | xargs grep -oP 'Exec=\\\\K[^%]*' | head -1 | xargs";
+        var cmd = "if command -v '" + binCmd + "' >/dev/null 2>&1; then " +
+                  "/usr/bin/hyprctl dispatch exec '" + cleanCmd + "'; " +
+                  "else " +
+                  "fb=$(" + fallbackCmd + "); " +
+                  "if [ -n \"$fb\" ]; then /usr/bin/hyprctl dispatch exec \"$fb\"; " +
+                  "else /usr/bin/hyprctl dispatch exec '" + cleanCmd + "'; fi; " +
+                  "fi";
+        execLaunch.command = ["sh", "-c", cmd]
+        execLaunch.running = true
+    }
+
     function triggerAction() {
         root.scale = 0.9
         clickAnimation.start()
@@ -29,10 +47,7 @@ Rectangle {
             execFocus.command = ["/usr/bin/hyprctl", "dispatch", "focuswindow", root.appClass]
             execFocus.running = true
         } else {
-            var fallback = "grep -rilm1 '" + root.execCmd + "' /usr/share/applications/ ~/.local/share/applications/ 2>/dev/null | head -1 | xargs grep -oP 'Exec=\\K[^%]*' | head -1"
-            var cmd = "/usr/bin/hyprctl dispatch exec " + root.execCmd + " || $(" + fallback + ") &"
-            execLaunch.command = ["sh", "-c", cmd]
-            execLaunch.running = true
+            root.forceLaunch()
         }
         root.actionExecuted()
     }
@@ -98,10 +113,15 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onClicked: (mouse) => {
             if (mouse.button === Qt.RightButton) {
                 root.pinToggled()
+                return;
+            }
+            if (mouse.button === Qt.MiddleButton) {
+                root.forceLaunch()
+                root.actionExecuted()
                 return;
             }
             root.triggerAction()
