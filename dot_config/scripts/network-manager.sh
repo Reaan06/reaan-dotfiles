@@ -25,23 +25,44 @@ get_scan() {
     nmcli device wifi rescan > /dev/null 2>&1
     sleep 0.5
     
+    # Get saved connections to identify "known" networks
+    local saved_ssids=$(nmcli -t -f NAME connection show)
+
     echo "["
-    # Get list, skip header and empty SSIDs
-    nmcli -t -f SSID,SIGNAL,SECURITY device wifi list | grep -v "^:" | sort -t':' -k2 -nr | head -n 12 | while read -r line; do
-        # nmcli -t uses ':' as separator. We need to handle colons in SSID if possible, 
-        # but nmcli -t doesn't escape them well. Using -f with specific order.
-        # Format: SSID:SIGNAL:SECURITY
+    # Get list with tech specs, skip header and empty SSIDs
+    # Format: SSID:SIGNAL:SECURITY:FREQ:CHAN:RATE:ACTIVE
+    nmcli -t -f SSID,SIGNAL,SECURITY,FREQ,CHAN,RATE,ACTIVE device wifi list | grep -v "^:" | sort -t':' -k2 -nr | head -n 12 | while read -r line; do
+        # Extract fields from the back to handle potential colons in SSID
+        local active=$(echo "$line" | rev | cut -d':' -f1 | rev)
+        local rate=$(echo "$line" | rev | cut -d':' -f2 | rev)
+        local chan=$(echo "$line" | rev | cut -d':' -f3 | rev)
+        local freq=$(echo "$line" | rev | cut -d':' -f4 | rev)
+        local security=$(echo "$line" | rev | cut -d':' -f5 | rev)
+        local signal=$(echo "$line" | rev | cut -d':' -f6 | rev)
         
-        # Extract signal (last but one field) and security (last field)
-        local signal=$(echo "$line" | rev | cut -d':' -f2 | rev)
-        local security=$(echo "$line" | rev | cut -d':' -f1 | rev)
         # SSID is everything before the signal
-        local ssid=$(echo "$line" | sed "s/:$signal:$security$//")
-        
+        # Use sed to remove the suffix :SIGNAL:SECURITY:FREQ:CHAN:RATE:ACTIVE
+        # We need to be careful with colons.
+        local suffix=":$signal:$security:$freq:$chan:$rate:$active"
+        local ssid=$(echo "$line" | sed "s/$(echo "$suffix" | sed 's/[]\/$*.^[]/\\&/g')$//")
+
         [ -z "$ssid" ] && continue
         
+        # Determine if known
+        local known="false"
+        if echo "$saved_ssids" | grep -qFx "$ssid"; then
+            known="true"
+        fi
+
+        # Convert frequency to Band
+        local band="2.4 GHz"
+        if [ "${freq//[!0-9]/}" -gt 5000 ] 2>/dev/null; then
+            band="5 GHz"
+        fi
+
         ssid_esc=$(echo "$ssid" | sed 's/"/\\"/g')
-        printf '  {"ssid":"%s","signal":%d,"security":"%s"},' "$ssid_esc" "$signal" "$security"
+        printf '  {"ssid":"%s","signal":%d,"security":"%s","band":"%s","chan":"%s","rate":"%s","known":%s},' \
+            "$ssid_esc" "$signal" "$security" "$band" "$chan" "$rate" "$known"
         echo
     done | sed '$ s/,$//'
     echo "]"
