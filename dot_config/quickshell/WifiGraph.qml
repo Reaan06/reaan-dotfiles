@@ -60,7 +60,12 @@ Item {
                 try {
                     var cleanText = text.trim()
                     if (cleanText.endsWith(",]")) cleanText = cleanText.replace(",]", "]")
-                    root.scanResults = JSON.parse(cleanText)
+                    var results = JSON.parse(cleanText)
+                    results.sort((a, b) => {
+                        if (a.known !== b.known) return (b.known ? 1 : 0) - (a.known ? 1 : 0);
+                        return b.signal - a.signal;
+                    })
+                    root.scanResults = results
                 } catch(e) { 
                     console.log("Error parseando WiFi:", e)
                 }
@@ -132,7 +137,7 @@ Item {
                 model: root.scanResults
                 spacing: 10 * root.scale
                 delegate: Rectangle {
-                    width: ListView.view.width; height: 70 * root.scale; radius: 16 * root.scale
+                    width: ListView.view.width; height: 80 * root.scale; radius: 16 * root.scale
                     color: root.cSurface
                     border.color: mouseArea.containsMouse ? root.accentColor : "transparent"
                     border.width: 1
@@ -140,15 +145,41 @@ Item {
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 15 * root.scale; spacing: 15 * root.scale
                         
-                        Text { text: "󰖩"; font.family: root.font; font.pixelSize: 20 * root.scale; color: root.accentColor }
+                        Text { text: "󰖩"; font.family: root.font; font.pixelSize: 22 * root.scale; color: root.accentColor }
                         
                         ColumnLayout {
-                            spacing: 0
-                            Text { text: modelData.ssid; font.family: root.font; font.pixelSize: 15 * root.scale; font.bold: true; color: root.cText }
-                            Text { text: modelData.security + " • " + modelData.signal + "% de señal"; font.family: root.font; font.pixelSize: 11 * root.scale; color: root.cSub }
+                            spacing: 4 * root.scale
+                            RowLayout {
+                                spacing: 8 * root.scale
+                                Text { text: modelData.ssid; font.family: root.font; font.pixelSize: 15 * root.scale; font.bold: true; color: root.cText }
+                                
+                                Rectangle {
+                                    visible: modelData.known
+                                    height: 16 * root.scale; radius: 4 * root.scale
+                                    color: root.accentColor
+                                    implicitWidth: knownText.implicitWidth + 10 * root.scale
+                                    Text {
+                                        id: knownText
+                                        anchors.centerIn: parent
+                                        text: "CONOCIDA"
+                                        font.family: root.font; font.pixelSize: 9 * root.scale; font.bold: true; color: "#11111b"
+                                    }
+                                }
+                            }
+
+                            Text { 
+                                text: modelData.band + " • Ch " + modelData.chan + " • " + modelData.rate + " • " + modelData.security
+                                font.family: root.font; font.pixelSize: 10 * root.scale; color: root.cSub 
+                            }
                         }
 
                         Item { Layout.fillWidth: true }
+
+                        Text { 
+                            text: modelData.signal + "%"
+                            font.family: root.font; font.pixelSize: 12 * root.scale; font.bold: true; color: root.cSub
+                            Layout.alignment: Qt.AlignVCenter
+                        }
 
                         Rectangle {
                             width: 36 * root.scale; height: 36 * root.scale; radius: 10 * root.scale
