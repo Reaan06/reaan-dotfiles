@@ -30,9 +30,6 @@ Item {
     property string password: ""
     property bool showingAuth: false
 
-    property string statusText: "WIFI"
-    property string subStatusText: "Pulsa para buscar"
-
     Process {
         id: infoProc
         command: ["sh", "-c", "~/.config/scripts/network-manager.sh info"]
@@ -47,14 +44,8 @@ Item {
                         root.security = data.security
                         root.mac = data.mac
                         root.localIp = data.local_ip
-                        root.statusText = data.ssid
-                        root.subStatusText = "Conectado"
                     } else {
                         root.connected = false
-                        if (!root.isSearching) {
-                            root.statusText = "WIFI"
-                            root.subStatusText = "Pulsa para buscar"
-                        }
                     }
                 } catch(e) { root.connected = false }
             }
@@ -68,22 +59,10 @@ Item {
             onStreamFinished: (text) => {
                 try {
                     var cleanText = text.trim()
-                    // Fix potential trailing commas or malformed JSON from bash
                     if (cleanText.endsWith(",]")) cleanText = cleanText.replace(",]", "]")
-                    
-                    var data = JSON.parse(cleanText)
-                    root.scanResults = data
-                    
-                    if (data.length === 0) {
-                        root.statusText = "WIFI"
-                        root.subStatusText = "No se encontraron redes"
-                    } else {
-                        root.statusText = "RESULTADOS"
-                        root.subStatusText = data.length + " redes encontradas"
-                    }
+                    root.scanResults = JSON.parse(cleanText)
                 } catch(e) { 
                     console.log("Error parseando WiFi:", e)
-                    root.subStatusText = "Error en el escaneo"
                 }
                 root.isSearching = false
             }
@@ -94,119 +73,129 @@ Item {
 
     Timer { interval: 5000; running: !root.isSearching; repeat: true; triggeredOnStart: true; onTriggered: infoProc.running = true }
 
-    property real animTime: 0
-    Timer { 
-        id: animTimer
-        interval: 16; running: root.isSearching || (!root.connected && root.scanResults.length > 0); repeat: true 
-        onTriggered: root.animTime += 0.016 
-    }
-
-    // ── VISTA: Grafo de Radar ──
-    GraphCanvas {
-        id: canvas
+    ColumnLayout {
         anchors.fill: parent
-        centerX: width / 2; centerY: height / 2
-        nodes: {
-            if (root.showingAuth) return []
-            let n = []
-            if (root.connected) {
-                let offsets = [[280,0], [0,280], [-280,0], [0,-280]]
-                for (let o of offsets) n.push({ x: width/2 + o[0], y: height/2 + o[1], color: root.accentColor })
-            } else if (root.scanResults.length > 0) {
-                for (let i = 0; i < root.scanResults.length; i++) {
-                    let res = root.scanResults[i]
-                    let radius = 180 + (100 - res.signal) * 2
-                    let angle = (i / root.scanResults.length) * 2 * Math.PI + (root.animTime * 0.4)
-                    n.push({ x: width/2 + radius * Math.cos(angle), y: height/2 + radius * Math.sin(angle), color: root.accentColor })
+        spacing: 16
+
+        // ── Status Box ──
+        Rectangle {
+            Layout.fillWidth: true; Layout.preferredHeight: 100 * root.scale; radius: 20 * root.scale
+            color: root.connected ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.15) : root.cSurface
+            border.color: root.connected ? root.accentColor : Qt.rgba(1,1,1,0.1); border.width: 1
+
+            RowLayout {
+                anchors.fill: parent; anchors.margins: 20 * root.scale; spacing: 20 * root.scale
+                
+                Rectangle {
+                    width: 60 * root.scale; height: 60 * root.scale; radius: 16 * root.scale; color: root.connected ? root.accentColor : root.cSub
+                    Text { anchors.centerIn: parent; text: root.connected ? "󰖩" : "󰖪"; font.family: root.font; font.pixelSize: 28 * root.scale; color: "#11111b" }
                 }
-            }
-            return n
-        }
-    }
 
-    Item {
-        anchors.fill: parent
-        visible: !root.showingAuth
-
-        // Nodo Central
-        NetworkNode {
-            anchors.centerIn: parent
-            icon: root.connected ? "󰖩" : (root.isSearching ? "󰖩" : "󰖪")
-            label: root.isSearching ? "BUSCANDO..." : root.statusText
-            subLabel: root.isSearching ? "Escaneando entorno" : root.subStatusText
-            active: root.connected || root.isSearching
-            loading: root.isSearching
-            accentColor: root.accentColor; scale: 1.5
-            onClicked: {
-                if (!root.connected && !root.isSearching) {
-                    root.isSearching = true
-                    root.scanResults = []
-                    scanProc.running = true
+                ColumnLayout {
+                    spacing: 2 * root.scale
+                    Text { 
+                        text: root.connected ? root.ssid : "Sin conexión"
+                        font.family: root.font; font.pixelSize: 18 * root.scale; font.bold: true; color: root.cText 
+                    }
+                    Text { 
+                        text: root.connected ? "Conectado • " + root.localIp : "Pulsa 'Escanear' para buscar redes"
+                        font.family: root.font; font.pixelSize: 12 * root.scale; color: root.cSub 
+                    }
                 }
-            }
-        }
 
-        // Info Satélites
-        Repeater {
-            model: root.connected ? 4 : 0
-            NetworkNode {
-                property var info: [
-                    {i:"󰩟", l:"IP Local", s:root.localIp},
-                    {i:"󰇧", l:"MAC", s:root.mac},
-                    {i:"󰈀", l:"Señal", s:root.signal+"%"},
-                    {i:"󰌍", l:"Desconectar", s:"Cerrar vínculo"}
-                ][index]
-                x: parent.width/2 + (index==0?280 : index==1?0 : index==2?-280 : 0) - 70
-                y: parent.height/2 + (index==0?0 : index==1?280 : index==2?0 : -280) - 70
-                icon: info.i; label: info.l; subLabel: info.s
-                accentColor: index == 3 ? "#f38ba8" : root.accentColor; scale: 1.1
-                onClicked: {
-                    if (index == 3) {
-                        connectProc.command = ["nmcli", "device", "disconnect", "wlan0"]
-                        connectProc.running = true
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: root.isSearching ? "BUSCANDO..." : "ESCANEAR"
+                    enabled: !root.isSearching
+                    onClicked: {
+                        root.isSearching = true
+                        scanProc.running = true
                     }
                 }
             }
         }
 
-        // Resultados Radar (Orbitando)
-        Repeater {
-            model: (!root.connected && root.scanResults.length > 0) ? root.scanResults.length : 0
-            NetworkNode {
-                property var result: root.scanResults[index]
-                property real radius: 150 + (100 - result.signal) * 2
-                property real angle: (index / root.scanResults.length) * 2 * Math.PI + (root.animTime * 0.5)
-                
-                x: parent.width/2 + radius * Math.cos(angle) - 70
-                y: parent.height/2 + radius * Math.sin(angle) - 70
-                
-                icon: "󰖩"; label: result.ssid; subLabel: result.signal + "%"; scale: 0.9
-                accentColor: root.accentColor
-                onClicked: {
-                    root.selectedSsid = result.ssid
-                    if (result.security !== "--" && result.security !== "None") root.showingAuth = true
-                    else {
-                        connectProc.command = ["nmcli", "device", "wifi", "connect", result.ssid]
-                        connectProc.running = true
+        // ── List Area ──
+        Text { 
+            text: "REDES DISPONIBLES"
+            font.family: root.font; font.pixelSize: 13 * root.scale; font.bold: true; color: root.cSub 
+            visible: root.scanResults.length > 0
+        }
+
+        ScrollView {
+            Layout.fillWidth: true; Layout.fillHeight: true
+            clip: true
+            ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+
+            ListView {
+                model: root.scanResults
+                spacing: 10 * root.scale
+                delegate: Rectangle {
+                    width: ListView.view.width; height: 70 * root.scale; radius: 16 * root.scale
+                    color: root.cSurface
+                    border.color: mouseArea.containsMouse ? root.accentColor : "transparent"
+                    border.width: 1
+
+                    RowLayout {
+                        anchors.fill: parent; anchors.margins: 15 * root.scale; spacing: 15 * root.scale
+                        
+                        Text { text: "󰖩"; font.family: root.font; font.pixelSize: 20 * root.scale; color: root.accentColor }
+                        
+                        ColumnLayout {
+                            spacing: 0
+                            Text { text: modelData.ssid; font.family: root.font; font.pixelSize: 15 * root.scale; font.bold: true; color: root.cText }
+                            Text { text: modelData.security + " • " + modelData.signal + "% de señal"; font.family: root.font; font.pixelSize: 11 * root.scale; color: root.cSub }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Rectangle {
+                            width: 36 * root.scale; height: 36 * root.scale; radius: 10 * root.scale
+                            color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.1)
+                            Text { anchors.centerIn: parent; text: "󱘖"; font.family: root.font; font.pixelSize: 16 * root.scale; color: root.accentColor }
+                        }
+                    }
+
+                    MouseArea {
+                        id: mouseArea
+                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.selectedSsid = modelData.ssid
+                            if (modelData.security !== "--" && modelData.security !== "None") root.showingAuth = true
+                            else {
+                                connectProc.command = ["nmcli", "device", "wifi", "connect", modelData.ssid]
+                                connectProc.running = true
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    // Auth Overlay (Simplified)
+    // Auth Overlay
     Rectangle {
-        anchors.fill: parent; visible: root.showingAuth; color: Qt.rgba(0,0,0,0.4)
+        anchors.fill: parent; visible: root.showingAuth; color: Qt.rgba(0,0,0,0.7); radius: 32 * root.scale
         ColumnLayout {
-            anchors.centerIn: parent; spacing: 20; width: 350
-            Text { text: "CONTRASEÑA PARA\n" + root.selectedSsid; font.family: root.font; font.pixelSize: 18; font.bold: true; color: root.cText; horizontalAlignment: Text.AlignHCenter }
+            anchors.centerIn: parent; spacing: 20 * root.scale; width: parent.width * 0.6
+            Text { 
+                text: "CONEXIÓN A RED"
+                font.family: root.font; font.pixelSize: 22 * root.scale; font.bold: true; color: root.cText; horizontalAlignment: Text.AlignHCenter 
+                Layout.fillWidth: true
+            }
+            Text { 
+                text: root.selectedSsid
+                font.family: root.font; font.pixelSize: 14 * root.scale; color: root.accentColor; horizontalAlignment: Text.AlignHCenter 
+                Layout.fillWidth: true
+            }
             TextField {
-                id: passField; Layout.fillWidth: true; placeholderText: "Password..."; echoMode: TextInput.Password; font.family: root.font; color: root.cText
-                background: Rectangle { radius: 12; color: root.cSurface; border.color: root.accentColor }
+                id: passField; Layout.fillWidth: true; placeholderText: "Contraseña..."; echoMode: TextInput.Password; font.family: root.font; color: root.cText
+                background: Rectangle { radius: 12 * root.scale; color: root.cBg; border.color: root.accentColor }
                 onTextChanged: root.password = text
             }
             RowLayout {
-                spacing: 12
+                spacing: 12 * root.scale
                 Button { text: "CANCELAR"; Layout.fillWidth: true; onClicked: root.showingAuth = false }
                 Button { 
                     text: "CONECTAR"; Layout.fillWidth: true; 

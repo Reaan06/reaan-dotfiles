@@ -25,6 +25,42 @@ Item {
     property color cSub:     "#6c7086"
     property color cSurface: Qt.rgba(1, 1, 1, 0.05)
 
+    Behavior on cBg { ColorAnimation { duration: 600 } }
+    Behavior on cBlue { ColorAnimation { duration: 600 } }
+    Behavior on cMauve { ColorAnimation { duration: 600 } }
+    Behavior on cGreen { ColorAnimation { duration: 600 } }
+    Behavior on cText { ColorAnimation { duration: 600 } }
+    Behavior on cSub { ColorAnimation { duration: 600 } }
+    Behavior on cSurface { ColorAnimation { duration: 600 } }
+
+    function parsePalette(raw) {
+        if (!raw || raw.length === 0) return
+        var parts = raw.split(" ")
+        if (parts.length < 8) return
+        try {
+            var pc = parts[0]
+            if (pc && pc.startsWith("#") && pc.length >= 7) {
+                var r = parseInt(pc.substr(1,2),16)/255
+                var g = parseInt(pc.substr(3,2),16)/255
+                var b = parseInt(pc.substr(5,2),16)/255
+                cBg      = Qt.rgba(r, g, b, 0.90)
+                cSurface = Qt.rgba(r + 0.05, g + 0.05, b + 0.05, 0.12)
+            }
+            cBlue   = parts[1] || cBlue
+            cGreen  = parts[2] || cGreen
+            cMauve  = parts[3] || cMauve
+            cText   = parts[6] || cText
+            cSub    = parts[7] || cSub
+        } catch (e) { console.log("Error parsing palette in BluetoothPanel: " + e) }
+    }
+
+    Process {
+        id: paletteProc
+        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
+        stdout: StdioCollector { onStreamFinished: { root.parsePalette(text.trim()) } }
+    }
+    Timer { interval: 3000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
+
     // State
     property string currentTab: "wifi"
 
@@ -32,8 +68,8 @@ Item {
     Rectangle {
         id: container
         anchors.fill: parent
-        radius: 32; color: root.cBg
-        border.color: Qt.rgba(1,1,1,0.1); border.width: 1.2
+        radius: 32 * root.scale; color: root.cBg
+        border.color: Qt.rgba(1,1,1,0.1); border.width: 1.2 * root.scale
 
         opacity: root.active ? 1.0 : 0.0
         scale: root.active ? 1.0 : 0.98
@@ -42,8 +78,8 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 24
-            spacing: 20
+            anchors.margins: 32 * root.scale
+            spacing: 24 * root.scale
 
             // ── Header ──
             RowLayout {
@@ -52,16 +88,16 @@ Item {
                     spacing: 0
                     Text { 
                         text: root.currentTab.toUpperCase() + " MANAGER"
-                        font.family: root.font; font.pixelSize: 22; font.bold: true; color: root.cText 
+                        font.family: root.font; font.pixelSize: 22 * root.scale; font.bold: true; color: root.cText 
                     }
                     Text { 
-                        text: "Gestión de red interactiva"; font.family: root.font; font.pixelSize: 12; color: root.cSub 
+                        text: "Gestión de red interactiva"; font.family: root.font; font.pixelSize: 12 * root.scale; color: root.cSub 
                     }
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
-                    width: 40; height: 40; radius: 12; color: root.cSurface
-                    Text { anchors.centerIn: parent; text: "󰅖"; font.family: root.font; font.pixelSize: 18; color: root.cText }
+                    width: 44 * root.scale; height: 44 * root.scale; radius: 14 * root.scale; color: root.cSurface
+                    Text { anchors.centerIn: parent; text: "󰅖"; font.family: root.font; font.pixelSize: 18 * root.scale; color: root.cText }
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                         onClicked: { 
@@ -72,9 +108,9 @@ Item {
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.08) }
+            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1.5 * root.scale; color: Qt.rgba(1,1,1,0.08) }
 
-            // ── Main Graph Area ──
+            // ── Main Content Area ──
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Loader {
@@ -88,17 +124,19 @@ Item {
                             item.cBg = root.cBg
                             item.cText = root.cText
                             item.cSub = root.cSub
+                            item.cSurface = root.cSurface
                             item.font = root.font
+                            item.scale = root.scale
                         }
                     }
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(1,1,1,0.08) }
+            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1.5 * root.scale; color: Qt.rgba(1,1,1,0.08) }
 
             // ── Tabs (Bottom) ──
             RowLayout {
-                Layout.fillWidth: true; spacing: 12
+                Layout.fillWidth: true; spacing: 16 * root.scale
                 
                 Repeater {
                     model: [
@@ -107,17 +145,17 @@ Item {
                     ]
                     
                     Rectangle {
-                        Layout.fillWidth: true; Layout.preferredHeight: 50; radius: 16
+                        Layout.fillWidth: true; Layout.preferredHeight: 54 * root.scale; radius: 16 * root.scale
                         color: root.currentTab === modelData.id ? modelData.accent : root.cSurface
                         
                         Row {
-                            anchors.centerIn: parent; spacing: 8
+                            anchors.centerIn: parent; spacing: 10 * root.scale
                             Text { 
-                                text: modelData.icon; font.family: root.font; font.pixelSize: 18
+                                text: modelData.icon; font.family: root.font; font.pixelSize: 18 * root.scale
                                 color: root.currentTab === modelData.id ? "#11111b" : modelData.accent
                             }
                             Text { 
-                                text: modelData.name; font.family: root.font; font.pixelSize: 13; font.bold: true
+                                text: modelData.name; font.family: root.font; font.pixelSize: 13 * root.scale; font.bold: true
                                 color: root.currentTab === modelData.id ? "#11111b" : root.cText
                             }
                         }
