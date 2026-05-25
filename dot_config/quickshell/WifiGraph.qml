@@ -15,6 +15,9 @@ Item {
     property color cSub:     "#6c7086"
     property string font:    "JetBrains Mono Nerd Font"
     property color cSurface: Qt.rgba(1, 1, 1, 0.05)
+    readonly property color onAccentFg: "#11111b"
+
+    readonly property string netScript: Quickshell.env("HOME") + "/.config/scripts/network-manager.sh"
 
     property bool connected: false
     property string ssid: ""
@@ -24,59 +27,108 @@ Item {
     property string localIp: ""
 
     property bool isSearching: false
+    property bool scanAttempted: false
     property var scanResults: []
     property string selectedSsid: ""
     property string password: ""
     property bool showingAuth: false
+    property string sudoPassword: ""
+    property bool showingSudoAuth: false
+    property string retrievedWifiPass: ""
+    property bool showingWifiPass: false
+
+    readonly property string getPassScript: Quickshell.env("HOME") + "/.config/scripts/get-wifi-pass.sh"
+
+    function parseWifiJson(raw, label) {
+        var clean = (raw || "").trim()
+        if (!clean.length) return []
+        if (clean.endsWith(",]")) clean = clean.replace(",]", "]")
+        try {
+            var data = JSON.parse(clean)
+            if (Array.isArray(data)) return data
+            if (data && data.error) console.log("Wifi " + label + " error:", data.error)
+        } catch (e) {
+            console.log("Wifi " + label + " parse error:", e, "raw:", clean.substring(0, 200))
+        }
+        return []
+    }
+
+    function applyInfo(raw) {
+        try {
+            var data = JSON.parse((raw || "").trim())
+            if (data.status === "connected") {
+                root.connected = true
+                root.ssid = data.ssid || ""
+                root.signal = (data.signal !== undefined) ? data.signal.toString() : ""
+                root.security = data.security || ""
+                root.mac = data.mac || ""
+                root.localIp = data.local_ip || ""
+            } else {
+                root.connected = false
+            }
+        } catch (e) {
+            console.log("Wifi Info Parse Error:", e)
+            root.connected = false
+        }
+    }
+
+    function applyScan(raw) {
+        var results = parseWifiJson(raw, "scan")
+        results.sort(function(a, b) {
+            if (a.known !== b.known) return (b.known ? 1 : 0) - (a.known ? 1 : 0)
+            return (b.signal || 0) - (a.signal || 0)
+        })
+        root.scanResults = results
+        root.isSearching = false
+        root.scanAttempted = true
+    }
+
+    function needsPassword(sec) {
+        if (!sec || sec === "--" || sec === "None" || sec === "Open") return false
+        return true
+    }
 
     Process {
         id: infoProc
-        command: ["sh", "-c", "/home/reaan/reaan-dotfiles/dot_config/scripts/network-manager.sh info"]
+        command: ["sh", "-c", root.netScript + " info"]
         stdout: StdioCollector {
-            onStreamFinished: (text) => {
-                console.log("Wifi Info Raw:", text)
-                try {
-                    var data = JSON.parse(text.trim())
-                    if (data.status === "connected") {
-                        root.connected = true
-                        root.ssid = data.ssid
-                        root.signal = data.signal.toString()
-                        root.security = data.security
-                        root.mac = data.mac
-                        root.localIp = data.local_ip
-                    } else {
-                        root.connected = false
-                    }
-                } catch(e) { 
-                    console.log("Wifi Info Parse Error:", e)
-                    root.connected = false 
-                }
-            }
+            onStreamFinished: applyInfo(text)
         }
     }
 
     Process {
         id: scanProc
-        command: ["sh", "-c", "/home/reaan/reaan-dotfiles/dot_config/scripts/network-manager.sh scan"]
+        command: ["sh", "-c", root.netScript + " scan"]
         stdout: StdioCollector {
-            onStreamFinished: (text) => {
-                console.log("Wifi Scan Raw:", text)
-                try {
-                    var results = JSON.parse(text.trim())
-                    results.sort((a, b) => {
-                        if (a.known !== b.known) return (b.known ? 1 : 0) - (a.known ? 1 : 0);
-                        return b.signal - a.signal;
-                    })
-                    root.scanResults = results
-                } catch(e) { 
-                    console.log("Wifi Scan Parse Error:", e)
-                }
+            onStreamFinished: applyScan(text)
+        }
+        onExited: function() {
+            if (root.isSearching) {
                 root.isSearching = false
+                root.scanAttempted = true
             }
         }
     }
 
-    Process { id: connectProc }
+    Process {
+        id: connectProc
+        onExited: function() {
+            infoProc.running = true
+        }
+    }
+
+    Process {
+        id: getPassProc
+        command: ["sh", "-c", root.getPassScript + " '" + root.ssid + "' '" + root.sudoPassword + "'"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.retrievedWifiPass = text.trim()
+                if (root.retrievedWifiPass.length > 0) {
+                    root.showingWifiPass = true
+                }
+            }
+        }
+    }
 
     Timer { interval: 5000; running: !root.isSearching; repeat: true; triggeredOnStart: true; onTriggered: infoProc.running = true }
 
@@ -91,41 +143,77 @@ Item {
 
             RowLayout {
                 anchors.fill: parent; anchors.margins: 20 * root.scale; spacing: 20 * root.scale
-                
+
                 Rectangle {
                     width: 60 * root.scale; height: 60 * root.scale; radius: 16 * root.scale; color: root.connected ? root.accentColor : root.cSub
-                    Text { anchors.centerIn: parent; text: root.connected ? "󰖩" : "󰖪"; font.family: root.font; font.pixelSize: 28 * root.scale; color: "#11111b" }
+                    Text { anchors.centerIn: parent; text: root.connected ? "󰖩" : "󰖪"; font.family: root.font; font.pixelSize: 28 * root.scale; color: root.onAccentFg }
                 }
 
                 ColumnLayout {
                     spacing: 2 * root.scale
-                    Text { 
+                    Text {
                         text: root.connected ? root.ssid : "Sin conexión"
-                        font.family: root.font; font.pixelSize: 18 * root.scale; font.bold: true; color: root.cText 
+                        font.family: root.font; font.pixelSize: 18 * root.scale; font.bold: true; color: root.cText
                     }
-                    Text { 
-                        text: root.connected ? "Conectado • " + root.localIp : "Pulsa 'Escanear' para buscar redes"
-                        font.family: root.font; font.pixelSize: 12 * root.scale; color: root.cSub 
+                    Text {
+                        text: root.connected
+                            ? ("Conectado • " + (root.localIp || "sin IP") + (root.signal ? " • " + root.signal + "%" : ""))
+                            : "Pulsa 'Escanear' para buscar redes"
+                        font.family: root.font; font.pixelSize: 12 * root.scale; color: root.cSub
                     }
                 }
 
                 Item { Layout.fillWidth: true }
 
-                Button {
-                    text: root.isSearching ? "BUSCANDO..." : "ESCANEAR"
-                    enabled: !root.isSearching
-                    onClicked: {
-                        root.isSearching = true
-                        scanProc.running = true
+                RowLayout {
+                    spacing: 10 * root.scale
+                    ActionPill {
+                        label: "VER CLAVE"
+                        iconGlyph: "󰌆"
+                        uiScale: root.scale
+                        uiFont: root.font
+                        accentColor: root.accentColor
+                        onAccentFg: root.onAccentFg
+                        fgColor: root.cText
+                        visible: root.connected
+                        onClicked: {
+                            root.sudoPassword = ""
+                            sudoPassField.text = ""
+                            root.showingSudoAuth = true
+                        }
+                    }
+
+                    ActionPill {
+                        label: root.isSearching ? "BUSCANDO..." : "ESCANEAR"
+                        iconGlyph: root.isSearching ? "󰑐" : "󰖩"
+                        uiScale: root.scale
+                        uiFont: root.font
+                        accentColor: root.accentColor
+                        onAccentFg: root.onAccentFg
+                        fgColor: root.cText
+                        primary: !root.isSearching
+                        busy: root.isSearching
+                        onClicked: {
+                            root.isSearching = true
+                            scanProc.running = true
+                        }
                     }
                 }
             }
         }
 
-        Text { 
+        Text {
             text: "REDES DISPONIBLES"
-            font.family: root.font; font.pixelSize: 13 * root.scale; font.bold: true; color: root.cSub 
+            font.family: root.font; font.pixelSize: 13 * root.scale; font.bold: true; color: root.cSub
             visible: root.scanResults.length > 0
+        }
+
+        Text {
+            text: root.isSearching ? "Escaneando redes..." : "No se encontraron redes. Vuelve a escanear."
+            font.family: root.font; font.pixelSize: 12 * root.scale; color: root.cSub
+            visible: root.scanAttempted && !root.isSearching && root.scanResults.length === 0
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
         }
 
         ScrollView {
@@ -144,15 +232,15 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 15 * root.scale; spacing: 15 * root.scale
-                        
+
                         Text { text: "󰖩"; font.family: root.font; font.pixelSize: 22 * root.scale; color: root.accentColor }
-                        
+
                         ColumnLayout {
                             spacing: 4 * root.scale
                             RowLayout {
                                 spacing: 8 * root.scale
                                 Text { text: modelData.ssid; font.family: root.font; font.pixelSize: 15 * root.scale; font.bold: true; color: root.cText }
-                                
+
                                 Rectangle {
                                     visible: modelData.known
                                     height: 16 * root.scale; radius: 4 * root.scale
@@ -162,20 +250,20 @@ Item {
                                         id: knownText
                                         anchors.centerIn: parent
                                         text: "CONOCIDA"
-                                        font.family: root.font; font.pixelSize: 9 * root.scale; font.bold: true; color: "#11111b"
+                                        font.family: root.font; font.pixelSize: 9 * root.scale; font.bold: true; color: root.onAccentFg
                                     }
                                 }
                             }
 
-                            Text { 
+                            Text {
                                 text: modelData.band + " • Ch " + modelData.chan + " • " + modelData.rate + " • " + modelData.security
-                                font.family: root.font; font.pixelSize: 10 * root.scale; color: root.cSub 
+                                font.family: root.font; font.pixelSize: 10 * root.scale; color: root.cSub
                             }
                         }
 
                         Item { Layout.fillWidth: true }
 
-                        Text { 
+                        Text {
                             text: modelData.signal + "%"
                             font.family: root.font; font.pixelSize: 12 * root.scale; font.bold: true; color: root.cSub
                             Layout.alignment: Qt.AlignVCenter
@@ -193,8 +281,11 @@ Item {
                         anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             root.selectedSsid = modelData.ssid
-                            if (modelData.security !== "--" && modelData.security !== "None") root.showingAuth = true
-                            else {
+                            if (root.needsPassword(modelData.security)) {
+                                root.password = ""
+                                passField.text = ""
+                                root.showingAuth = true
+                            } else {
                                 connectProc.command = ["nmcli", "device", "wifi", "connect", modelData.ssid]
                                 connectProc.running = true
                             }
@@ -205,35 +296,208 @@ Item {
         }
     }
 
-    Rectangle {
-        anchors.fill: parent; visible: root.showingAuth; color: Qt.rgba(0,0,0,0.7); radius: 32 * root.scale
-        ColumnLayout {
-            anchors.centerIn: parent; spacing: 20 * root.scale; width: parent.width * 0.6
-            Text { 
-                text: "CONEXIÓN A RED"
-                font.family: root.font; font.pixelSize: 22 * root.scale; font.bold: true; color: root.cText; horizontalAlignment: Text.AlignHCenter 
-                Layout.fillWidth: true
+    // --- MODALS LAYER ---
+    Item {
+        id: modalsLayer
+        anchors.fill: parent
+        z: 10
+        visible: root.showingAuth || root.showingSudoAuth || root.showingWifiPass
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0,0,0,0.7)
+            radius: 32 * root.scale
+
+            MouseArea { 
+                anchors.fill: parent
+                propagateComposedEvents: true 
+                onPressed: (mouse) => mouse.accepted = false
             }
-            Text { 
-                text: root.selectedSsid
-                font.family: root.font; font.pixelSize: 14 * root.scale; color: root.accentColor; horizontalAlignment: Text.AlignHCenter 
-                Layout.fillWidth: true
-            }
-            TextField {
-                id: passField; Layout.fillWidth: true; placeholderText: "Contraseña..."; echoMode: TextInput.Password; font.family: root.font; color: root.cText
-                background: Rectangle { radius: 12 * root.scale; color: root.cBg; border.color: root.accentColor }
-                onTextChanged: root.password = text
-            }
-            RowLayout {
-                spacing: 12 * root.scale
-                Button { text: "CANCELAR"; Layout.fillWidth: true; onClicked: root.showingAuth = false }
-                Button { 
-                    text: "CONECTAR"; Layout.fillWidth: true; 
-                    onClicked: {
-                        connectProc.command = ["nmcli", "device", "wifi", "connect", root.selectedSsid, "password", root.password]
-                        connectProc.running = true
-                        root.showingAuth = false
+        }
+
+        // 1. WiFi Connection Auth (Original)
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.width * 0.7
+            height: parent.height * 0.5
+            color: "transparent"
+            visible: root.showingAuth
+            onVisibleChanged: if (visible) passField.forceActiveFocus()
+
+            ColumnLayout {
+                anchors.centerIn: parent; spacing: 20 * root.scale; width: parent.width
+                Text {
+                    text: "CONEXIÓN A RED"
+                    font.family: root.font; font.pixelSize: 22 * root.scale; font.bold: true; color: root.cText; horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+                Text {
+                    text: root.selectedSsid
+                    font.family: root.font; font.pixelSize: 14 * root.scale; color: root.accentColor; horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+                TextField {
+                    id: passField; Layout.fillWidth: true; placeholderText: "Contraseña..."; echoMode: TextInput.Password; font.family: root.font; color: root.cText
+                    focus: true
+                    background: Rectangle { radius: 12 * root.scale; color: root.cBg; border.color: root.accentColor }
+                    onTextChanged: root.password = text
+                }
+                RowLayout {
+                    spacing: 12 * root.scale
+                    Layout.fillWidth: true
+                    ActionPill {
+                        Layout.fillWidth: true
+                        label: "CANCELAR"
+                        iconGlyph: "󰅖"
+                        uiScale: root.scale
+                        uiFont: root.font
+                        accentColor: root.accentColor
+                        onAccentFg: root.onAccentFg
+                        fgColor: root.cText
+                        onClicked: root.showingAuth = false
                     }
+                    ActionPill {
+                        Layout.fillWidth: true
+                        label: "CONECTAR"
+                        iconGlyph: "󰖩"
+                        uiScale: root.scale
+                        uiFont: root.font
+                        accentColor: root.accentColor
+                        onAccentFg: root.onAccentFg
+                        fgColor: root.cText
+                        primary: true
+                        onClicked: {
+                            connectProc.command = ["nmcli", "device", "wifi", "connect", root.selectedSsid, "password", root.password]
+                            connectProc.running = true
+                            root.showingAuth = false
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Sudo Auth Modal
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.width * 0.7
+            height: parent.height * 0.5
+            color: "transparent"
+            visible: root.showingSudoAuth
+            onVisibleChanged: if (visible) sudoPassField.forceActiveFocus()
+
+            ColumnLayout {
+                anchors.centerIn: parent; spacing: 20 * root.scale; width: parent.width
+                Text {
+                    text: "SUDO AUTHENTICATION"
+                    font.family: root.font; font.pixelSize: 22 * root.scale; font.bold: true; color: root.cText; horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+                Text {
+                    text: "Introduce tu contraseña para ver la clave de la red"
+                    font.family: root.font; font.pixelSize: 12 * root.scale; color: root.cSub; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true
+                }
+                TextField {
+                    id: sudoPassField; Layout.fillWidth: true; placeholderText: "Sudo password..."; echoMode: TextInput.Password; font.family: root.font; color: root.cText
+                    focus: true
+                    background: Rectangle { radius: 12 * root.scale; color: root.cBg; border.color: root.accentColor }
+                    onTextChanged: root.sudoPassword = text
+                    onAccepted: {
+                        getPassProc.running = true
+                        root.showingSudoAuth = false
+                    }
+                }
+                RowLayout {
+                    spacing: 12 * root.scale
+                    Layout.fillWidth: true
+                    ActionPill {
+                        Layout.fillWidth: true
+                        label: "CANCELAR"
+                        iconGlyph: "󰅖"
+                        uiScale: root.scale
+                        uiFont: root.font
+                        accentColor: root.accentColor
+                        onAccentFg: root.onAccentFg
+                        fgColor: root.cText
+                        onClicked: root.showingSudoAuth = false
+                    }
+                    ActionPill {
+                        Layout.fillWidth: true
+                        label: "VERIFICAR"
+                        iconGlyph: "󰌆"
+                        uiScale: root.scale
+                        uiFont: root.font
+                        accentColor: root.accentColor
+                        onAccentFg: root.onAccentFg
+                        fgColor: root.cText
+                        primary: true
+                        onClicked: {
+                            getPassProc.running = true
+                            root.showingSudoAuth = false
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. WiFi Password Display Modal
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.width * 0.7
+            height: parent.height * 0.5
+            color: "transparent"
+            visible: root.showingWifiPass
+
+            // Close button (X)
+            Rectangle {
+                anchors.top: parent.top; anchors.right: parent.right
+                anchors.topMargin: -10 * root.scale; anchors.rightMargin: -10 * root.scale
+                width: 32 * root.scale; height: 32 * root.scale; radius: 16 * root.scale
+                color: root.cSurface; border.color: root.accentColor; border.width: 1
+                z: 100
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰅖"
+                    font.family: root.font; font.pixelSize: 16 * root.scale; color: root.cText
+                }
+
+                MouseArea {
+                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                    onClicked: root.showingWifiPass = false
+                }
+            }
+
+            ColumnLayout {
+                anchors.centerIn: parent; spacing: 20 * root.scale; width: parent.width
+                Text {
+                    text: "CONTRASEÑA WIFI"
+                    font.family: root.font; font.pixelSize: 22 * root.scale; font.bold: true; color: root.cText; horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+                Text {
+                    text: root.ssid
+                    font.family: root.font; font.pixelSize: 14 * root.scale; color: root.accentColor; horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+                Rectangle {
+                    Layout.fillWidth: true; height: 50 * root.scale; radius: 12 * root.scale; color: root.cBg; border.color: root.accentColor
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.retrievedWifiPass
+                        font.family: root.font; font.pixelSize: 16 * root.scale; color: root.cText; font.bold: true
+                    }
+                }
+                ActionPill {
+                    Layout.fillWidth: true
+                    label: "CERRAR"
+                    iconGlyph: "󰅖"
+                    uiScale: root.scale
+                    uiFont: root.font
+                    accentColor: root.accentColor
+                    onAccentFg: root.onAccentFg
+                    fgColor: root.cText
+                    primary: true
+                    onClicked: root.showingWifiPass = false
                 }
             }
         }

@@ -61,6 +61,22 @@ Item {
     }
     Timer { interval: 3000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
 
+    function syncGraphTheme() {
+        if (!graphLoader.item) return
+        graphLoader.item.scale = root.scale
+        graphLoader.item.font = root.font
+        graphLoader.item.accentColor = root.currentTab === "wifi" ? root.cBlue : root.cMauve
+        graphLoader.item.cBg = root.cBg
+        graphLoader.item.cText = root.cText
+        graphLoader.item.cSub = root.cSub
+        graphLoader.item.cSurface = root.cSurface
+    }
+
+    Connections {
+        target: root
+        function onCurrentTabChanged() { syncGraphTheme() }
+    }
+
     // State
     property string currentTab: "wifi"
 
@@ -117,17 +133,50 @@ Item {
                     id: graphLoader
                     anchors.fill: parent
                     source: root.currentTab === "wifi" ? "WifiGraph.qml" : "BluetoothGraph.qml"
-                    
-                    onLoaded: {
-                        if (item) {
-                            item.accentColor = root.currentTab === "wifi" ? root.cBlue : root.cMauve
-                            item.cBg = root.cBg
-                            item.cText = root.cText
-                            item.cSub = root.cSub
-                            item.cSurface = root.cSurface
-                            item.font = root.font
-                            item.scale = root.scale
-                        }
+
+                    onLoaded: syncGraphTheme()
+
+                    Binding {
+                        target: graphLoader.item
+                        property: "scale"
+                        value: root.scale
+                        when: graphLoader.status === Loader.Ready && graphLoader.item
+                    }
+                    Binding {
+                        target: graphLoader.item
+                        property: "font"
+                        value: root.font
+                        when: graphLoader.status === Loader.Ready && graphLoader.item
+                    }
+                    Binding {
+                        target: graphLoader.item
+                        property: "accentColor"
+                        value: root.currentTab === "wifi" ? root.cBlue : root.cMauve
+                        when: graphLoader.status === Loader.Ready && graphLoader.item
+                    }
+                    Binding {
+                        target: graphLoader.item
+                        property: "cBg"
+                        value: root.cBg
+                        when: graphLoader.status === Loader.Ready && graphLoader.item
+                    }
+                    Binding {
+                        target: graphLoader.item
+                        property: "cText"
+                        value: root.cText
+                        when: graphLoader.status === Loader.Ready && graphLoader.item
+                    }
+                    Binding {
+                        target: graphLoader.item
+                        property: "cSub"
+                        value: root.cSub
+                        when: graphLoader.status === Loader.Ready && graphLoader.item
+                    }
+                    Binding {
+                        target: graphLoader.item
+                        property: "cSurface"
+                        value: root.cSurface
+                        when: graphLoader.status === Loader.Ready && graphLoader.item
                     }
                 }
             }

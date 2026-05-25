@@ -1,24 +1,42 @@
 #!/bin/bash
 # network-manager.sh — Backend for Wifi Graph Panel (Robust JSON)
 
+# nmcli -t uses ':' separators; SSID is last and may contain colons.
+parse_info_line() {
+    local line="$1"
+    ACTIVE="${line%%:*}"; line="${line#*:}"
+    SIGNAL="${line%%:*}"; line="${line#*:}"
+    SECURITY="${line%%:*}"; line="${line#*:}"
+    DEVICE="${line%%:*}"; line="${line#*:}"
+    SSID="${line}"
+}
+
+parse_scan_line() {
+    local line="$1"
+    SIGNAL="${line%%:*}"; line="${line#*:}"
+    SECURITY="${line%%:*}"; line="${line#*:}"
+    FREQ="${line%%:*}"; line="${line#*:}"
+    CHAN="${line%%:*}"; line="${line#*:}"
+    RATE="${line%%:*}"; line="${line#*:}"
+    ACTIVE="${line%%:*}"; line="${line#*:}"
+    SSID="${line}"
+}
+
 get_info() {
-    # Get basic connection info. Put SSID last to handle potential colons robustly.
-    local active_data=$(nmcli -t -f ACTIVE,SIGNAL,SECURITY,DEVICE,SSID device wifi | grep "^yes" | head -n 1)
-    
+    local active_data
+    active_data=$(nmcli -t -f ACTIVE,SIGNAL,SECURITY,DEVICE,SSID device wifi 2>/dev/null | grep "^yes" | head -n 1)
+
     if [ -n "$active_data" ]; then
-        IFS=':' read -r active signal security device ssid <<< "$active_data"
-        
-        # Get MAC address (fix extraction to get full address)
-        local mac=$(nmcli -t -f GENERAL.HWADDR device show "$device" | cut -d':' -f2-)
-        
-        # Get local IP
-        local ip_local=$(ip -4 addr show dev "$device" scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n 1)
-        
-        # Use jq for robust JSON generation
+        parse_info_line "$active_data"
+
+        local mac ip_local
+        mac=$(nmcli -t -f GENERAL.HWADDR device show "$DEVICE" 2>/dev/null | head -n 1 | cut -d':' -f2- | xargs)
+        ip_local=$(ip -4 addr show dev "$DEVICE" scope global 2>/dev/null | awk '/inet / {print $2}' | head -n 1 | cut -d/ -f1)
+
         jq -n \
-            --arg ssid "$ssid" \
-            --argjson signal "${signal:-0}" \
-            --arg security "$security" \
+            --arg ssid "$SSID" \
+            --argjson signal "${SIGNAL:-0}" \
+            --arg security "$SECURITY" \
             --arg mac "$mac" \
             --arg ip_local "$ip_local" \
             '{status: "connected", ssid: $ssid, signal: $signal, security: $security, mac: $mac, local_ip: $ip_local}'
@@ -28,45 +46,58 @@ get_info() {
 }
 
 get_scan() {
-    # Force a rescan to get fresh results
-    nmcli device wifi rescan > /dev/null 2>&1
-    sleep 0.5
-    
-    # Get saved connections to identify "known" networks
-    mapfile -t saved_ssids_arr < <(nmcli -t -f NAME connection show)
+    local -a saved_ssids_arr=()
+    mapfile -t saved_ssids_arr < <(nmcli -t -f NAME connection show 2>/dev/null)
 
-    # Get list with tech specs. SIGNAL first for sorting, SSID last for colon robustness.
-    # Format: SIGNAL:SECURITY:FREQ:CHAN:RATE:ACTIVE:SSID
-    nmcli -t -f SIGNAL,SECURITY,FREQ,CHAN,RATE,ACTIVE,SSID device wifi list | grep -v "^:" | sort -t':' -k1 -nr | head -n 12 | while IFS=":" read -r signal security freq chan rate active ssid; do
-        [ -z "$ssid" ] && continue
-        
-        # Determine if known
-        local known=false
+    local json_lines=()
+    local line signal security freq chan rate active ssid band freq_num known
+
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        parse_scan_line "$line"
+        [ -z "$SSID" ] && continue
+
+        known=false
         for s in "${saved_ssids_arr[@]}"; do
-            if [[ "$s" == "$ssid" ]]; then
+            if [[ "$s" == "$SSID" ]]; then
                 known=true
                 break
             fi
         done
 
-        # Convert frequency to Band
-        local band="2.4 GHz"
-        local freq_num="${freq//[!0-9]/}"
+        band="2.4 GHz"
+        freq_num="${FREQ//[!0-9]/}"
         if [ -n "$freq_num" ] && [ "$freq_num" -gt 5000 ]; then
             band="5 GHz"
         fi
 
-        # Output individual objects
-        jq -n \
-            --arg ssid "$ssid" \
-            --argjson signal "${signal:-0}" \
-            --arg security "$security" \
-            --arg band "$band" \
-            --arg chan "$chan" \
-            --arg rate "$rate" \
-            --argjson known "$known" \
-            '{ssid: $ssid, signal: $signal, security: $security, band: $band, chan: $chan, rate: $rate, known: $known}'
-    done | jq -s '.' # Slurp all objects into a JSON array
+        json_lines+=("$(
+            jq -n \
+                --arg ssid "$SSID" \
+                --argjson signal "${SIGNAL:-0}" \
+                --arg security "$SECURITY" \
+                --arg band "$band" \
+                --arg chan "$CHAN" \
+                --arg rate "$RATE" \
+                --argjson known "$known" \
+                '{ssid: $ssid, signal: $signal, security: $security, band: $band, chan: $chan, rate: $rate, known: $known}'
+        )")
+    done < <(
+        nmcli -t -f SIGNAL,SECURITY,FREQ,CHAN,RATE,ACTIVE,SSID device wifi list --rescan yes 2>/dev/null \
+            | grep -v "^:" \
+            | sort -t':' -k1 -nr \
+            | head -n 20
+    )
+
+    if [ "${#json_lines[@]}" -eq 0 ]; then
+        echo '[]'
+        return
+    fi
+
+    printf '%s\n' "${json_lines[@]}" | jq -s '
+        unique_by(.ssid)
+        | sort_by(-(if .known then 1 else 0 end), -.signal)
+        | .[0:12]'
 }
 
 case "$1" in

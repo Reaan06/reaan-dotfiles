@@ -1,4 +1,5 @@
 module components
+ActionPill 1.0 ActionPill.qml
 Pill 1.0 Pill.qml
 PanelConnector 1.0 PanelConnector.qml
 CircularGauge 1.0 CircularGauge.qml

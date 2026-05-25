@@ -256,6 +256,9 @@ ShellRoot {
             screen: modelData
             visible: (btVisible || btAnimating) && screen.name === btMonitor
             
+            // Allow keyboard focus for text input (WiFi passwords)
+            WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+
             // Posicionamiento lateral derecho
             anchors.top: true; anchors.bottom: true; anchors.right: true
             

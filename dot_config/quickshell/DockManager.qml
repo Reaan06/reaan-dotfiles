@@ -216,7 +216,7 @@ FocusScope {
     Timer { id: hideTimer; interval: 1000; onTriggered: if (!root.launcherOpen && !root.isHovered) root.active = false }
 
     function loadPinned() {
-        var path = Quickshell.env["HOME"] + "/.config/scripts/pinned_apps.json"
+        var path = Quickshell.env("HOME") + "/.config/scripts/pinned_apps.json"
         try {
             var content = Quickshell.readFile(path)
             if (content) root.pinnedApps = JSON.parse(content)
@@ -224,7 +224,7 @@ FocusScope {
     }
     
     function loadHidden() {
-        var path = Quickshell.env["HOME"] + "/.config/scripts/hidden_apps.json"
+        var path = Quickshell.env("HOME") + "/.config/scripts/hidden_apps.json"
         try {
             var content = Quickshell.readFile(path)
             if (content) root.hiddenApps = JSON.parse(content)
