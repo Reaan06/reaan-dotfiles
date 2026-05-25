@@ -105,16 +105,21 @@ Item {
         id: mprisProc; command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-mpris 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var lines = text.trim().split("\n")
-                if (lines.length >= 7 && lines[0] !== "Stopped" && lines[0] !== "") {
-                    root.mpPlaying = (lines[0] === "Playing"); root.mpTitle = lines[1]; root.mpArtist = lines[2]
-                    root.mpArtUrl = lines[3]; root.mpPos = parseInt(lines[4]) || 0; root.mpLen = parseInt(lines[5]) || 0
-                    var rawSource = lines[6].toLowerCase()
-                    if (rawSource.indexOf("spotify") !== -1) root.mpSource = "Spotify"
-                    else if (rawSource.indexOf("firefox") !== -1) root.mpSource = "YouTube/Browser"
-                    else root.mpSource = rawSource.charAt(0).toUpperCase() + rawSource.slice(1)
-                } else { root.mpTitle = "No Media"; root.mpArtist = ""; root.mpPlaying = false; root.mpSource = "System" }
+            var lines = text.trim().split("\n")
+            if (lines.length >= 7 && lines[0] !== "Stopped" && lines[0] !== "") {
+            root.mpPlaying = (lines[0] === "Playing"); root.mpTitle = lines[1]; root.mpArtist = lines[2]
+            root.mpArtUrl = lines[3];
+            // Time is received in seconds from mpris-follow.sh
+            root.mpPos = parseInt(lines[4]) || 0;
+            root.mpLen = parseInt(lines[5]) || 0;
+
+            var rawSource = lines[6].toLowerCase()
+            if (rawSource.indexOf("spotify") !== -1) root.mpSource = "Spotify"
+            else if (rawSource.indexOf("firefox") !== -1) root.mpSource = "YouTube/Browser"
+            else root.mpSource = rawSource.charAt(0).toUpperCase() + rawSource.slice(1)
+            } else { root.mpTitle = "No Media"; root.mpArtist = ""; root.mpPlaying = false; root.mpSource = "System" }
             }
+
         }
     }
     Timer { interval: 500; running: true; repeat: true; onTriggered: mprisProc.running = true }

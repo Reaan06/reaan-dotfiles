@@ -23,6 +23,7 @@ Item {
     property string mac: ""
     property string localIp: ""
 
+    // Búsqueda y Selección
     property bool isSearching: false
     property var scanResults: []
     property string selectedSsid: ""
@@ -31,10 +32,9 @@ Item {
 
     Process {
         id: infoProc
-        command: ["sh", "-c", "/home/reaan/reaan-dotfiles/dot_config/scripts/network-manager.sh info"]
+        command: ["sh", "-c", "~/.config/scripts/network-manager.sh info"]
         stdout: StdioCollector {
             onStreamFinished: (text) => {
-                console.log("Wifi Info Raw:", text)
                 try {
                     var data = JSON.parse(text.trim())
                     if (data.status === "connected") {
@@ -47,29 +47,27 @@ Item {
                     } else {
                         root.connected = false
                     }
-                } catch(e) { 
-                    console.log("Wifi Info Parse Error:", e)
-                    root.connected = false 
-                }
+                } catch(e) { root.connected = false }
             }
         }
     }
 
     Process {
         id: scanProc
-        command: ["sh", "-c", "/home/reaan/reaan-dotfiles/dot_config/scripts/network-manager.sh scan"]
+        command: ["sh", "-c", "~/.config/scripts/network-manager.sh scan"]
         stdout: StdioCollector {
             onStreamFinished: (text) => {
-                console.log("Wifi Scan Raw:", text)
                 try {
-                    var results = JSON.parse(text.trim())
+                    var cleanText = text.trim()
+                    if (cleanText.endsWith(",]")) cleanText = cleanText.replace(",]", "]")
+                    var results = JSON.parse(cleanText)
                     results.sort((a, b) => {
                         if (a.known !== b.known) return (b.known ? 1 : 0) - (a.known ? 1 : 0);
                         return b.signal - a.signal;
                     })
                     root.scanResults = results
                 } catch(e) { 
-                    console.log("Wifi Scan Parse Error:", e)
+                    console.log("Error parseando WiFi:", e)
                 }
                 root.isSearching = false
             }
@@ -84,6 +82,7 @@ Item {
         anchors.fill: parent
         spacing: 16
 
+        // ── Status Box ──
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 100 * root.scale; radius: 20 * root.scale
             color: root.connected ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.15) : root.cSurface
@@ -122,6 +121,7 @@ Item {
             }
         }
 
+        // ── List Area ──
         Text { 
             text: "REDES DISPONIBLES"
             font.family: root.font; font.pixelSize: 13 * root.scale; font.bold: true; color: root.cSub 
@@ -205,6 +205,7 @@ Item {
         }
     }
 
+    // Auth Overlay
     Rectangle {
         anchors.fill: parent; visible: root.showingAuth; color: Qt.rgba(0,0,0,0.7); radius: 32 * root.scale
         ColumnLayout {

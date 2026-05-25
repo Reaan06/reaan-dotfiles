@@ -20,17 +20,17 @@ Item {
     property string deviceName: ""
     property string mac: ""
     property string battery: ""
-    property string type: "unknown"
+    property string iconType: "bluetooth"
 
-    // Búsqueda
     property bool isSearching: false
     property var scanResults: []
 
     Process {
         id: btInfoProc
-        command: ["sh", "-c", "~/.config/scripts/bt-manager.sh info"]
+        command: ["/home/reaan/reaan-dotfiles/dot_config/scripts/bt-manager.sh", "info"]
         stdout: StdioCollector {
             onStreamFinished: (text) => {
+                console.log("BT Info Raw:", text)
                 try {
                     var data = JSON.parse(text.trim())
                     if (data.status === "connected") {
@@ -38,23 +38,24 @@ Item {
                         root.deviceName = data.name
                         root.mac = data.mac
                         root.battery = data.battery
-                        root.type = data.type
+                        root.icon = data.icon
                     } else {
                         root.connected = false
                     }
-                } catch(e) {}
+                } catch(e) { console.log("BT Info Error:", e) }
             }
         }
     }
 
     Process {
         id: btScanProc
-        command: ["sh", "-c", "~/.config/scripts/bt-manager.sh scan"]
+        command: ["sh", "-c", "/home/reaan/reaan-dotfiles/dot_config/scripts/bt-manager.sh scan"]
         stdout: StdioCollector {
             onStreamFinished: (text) => {
+                console.log("BT Scan Raw:", text)
                 try {
                     root.scanResults = JSON.parse(text.trim())
-                } catch(e) { }
+                } catch(e) { console.log("BT Scan Error:", e) }
                 root.isSearching = false
             }
         }
@@ -64,11 +65,22 @@ Item {
 
     Timer { interval: 4000; running: !root.isSearching; repeat: true; triggeredOnStart: true; onTriggered: btInfoProc.running = true }
 
+    function getIcon(icon) {
+        switch(icon) {
+            case "audio-headset": return "󰋋";
+            case "audio-card": return "󰓃";
+            case "input-keyboard": return "󰌌";
+            case "input-mouse": return "󰍽";
+            case "phone": return "󰏲";
+            case "computer": return "󰟀";
+            default: return "󰂯";
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 16
 
-        // ── Status Box ──
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 100 * root.scale; radius: 20 * root.scale
             color: root.connected ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.15) : root.cSurface
@@ -81,7 +93,7 @@ Item {
                     width: 60 * root.scale; height: 60 * root.scale; radius: 16 * root.scale; color: root.connected ? root.accentColor : root.cSub
                     Text { 
                         anchors.centerIn: parent; 
-                        text: root.connected ? (root.type === "audio-card" || root.type === "audio-headset" ? "󰋋" : "󰂱") : "󰂲"
+                        text: root.getIcon(root.iconType)
                         font.family: root.font; font.pixelSize: 28 * root.scale; color: "#11111b" 
                     }
                 }
@@ -122,7 +134,6 @@ Item {
             }
         }
 
-        // ── List Area ──
         Text { 
             text: "DISPOSITIVOS CONOCIDOS / ENCONTRADOS"
             font.family: root.font; font.pixelSize: 13 * root.scale; font.bold: true; color: root.cSub 
@@ -138,7 +149,7 @@ Item {
                 model: root.scanResults
                 spacing: 10 * root.scale
                 delegate: Rectangle {
-                    width: ListView.view.width; height: 70 * root.scale; radius: 16 * root.scale
+                    width: ListView.view.width; height: 80 * root.scale; radius: 16 * root.scale
                     color: root.cSurface
                     border.color: mouseArea.containsMouse ? root.accentColor : "transparent"
                     border.width: 1
@@ -146,12 +157,12 @@ Item {
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 15 * root.scale; spacing: 15 * root.scale
                         
-                        Text { text: "󰂯"; font.family: root.font; font.pixelSize: 20 * root.scale; color: root.accentColor }
+                        Text { text: root.getIcon(modelData.icon); font.family: root.font; font.pixelSize: 22 * root.scale; color: modelData.paired ? root.accentColor : root.cSub }
                         
                         ColumnLayout {
-                            spacing: 0
+                            spacing: 4 * root.scale
                             Text { text: modelData.name; font.family: root.font; font.pixelSize: 15 * root.scale; font.bold: true; color: root.cText }
-                            Text { text: modelData.mac; font.family: root.font; font.pixelSize: 11 * root.scale; color: root.cSub }
+                            Text { text: (modelData.paired ? "Emparejado • " : "") + modelData.mac; font.family: root.font; font.pixelSize: 11 * root.scale; color: root.cSub }
                         }
 
                         Item { Layout.fillWidth: true }
@@ -159,7 +170,7 @@ Item {
                         Rectangle {
                             width: 36 * root.scale; height: 36 * root.scale; radius: 10 * root.scale
                             color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.1)
-                            Text { anchors.centerIn: parent; text: "󰄄"; font.family: root.font; font.pixelSize: 16 * root.scale; color: root.accentColor }
+                            Text { anchors.centerIn: parent; text: "󱘖"; font.family: root.font; font.pixelSize: 16 * root.scale; color: root.accentColor }
                         }
                     }
 

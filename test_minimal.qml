@@ -1,22 +1,37 @@
-import Quickshell
-import Quickshell.Wayland
 import QtQuick
+import QtQuick.Controls
 
-ShellRoot {
-    PanelWindow {
-        id: win
-        WlrLayerShell.namespace: "quickshell-test"
-        WlrLayerShell.layer: WlrLayerShell.Top
-        
-        anchors { top: true; left: true; right: true }
-        implicitHeight: 60
-        color: "purple"
-        
+ApplicationWindow {
+    visible: true
+    width: 400
+    height: 300
+    title: "Minimal Test"
+
+    property string output: "Waiting for output..."
+
+    Column {
+        anchors.centerIn: parent
         Text {
-            anchors.centerIn: parent
-            text: "IF YOU SEE THIS, IT WORKS"
-            color: "white"
-            font.pixelSize: 30
+            text: "Network Test Output:"
+            font.bold: true
         }
+        Text {
+            id: outputText
+            text: parent.parent.output
+            wrapMode: Text.WordWrap
+            width: 300
+        }
+    }
+
+    Component.onCompleted: {
+        // Ejecutar el script con el argumento "info"
+        Quickshell.spawn(["/home/reaan/reaan-dotfiles/dot_config/scripts/network-manager.sh", "info"], {
+            onStdout: (data) => {
+                output = data
+            },
+            onStderr: (data) => {
+                output = "Error: " + data
+            }
+        })
     }
 }
