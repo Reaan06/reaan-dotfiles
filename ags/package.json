@@ -9,7 +9,7 @@
     "dev": "node build.js --watch"
   },
   "devDependencies": {
-    "esbuild": "^0.20.2",
+    "esbuild": "^0.25.0",
     "sass": "^1.72.0",
     "typescript": "^5.4.3"
   }
