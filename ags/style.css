@@ -1,0 +1,66 @@
+.bar-window {
+  background-color: transparent;
+}
+
+.bar-container {
+  background-color: rgba(17, 17, 27, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  margin: 8px 12px;
+  padding: 6px 16px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bar-container:hover {
+  border-color: rgba(203, 166, 247, 0.2);
+}
+
+.workspace-button {
+  background-color: rgba(255, 255, 255, 0.04);
+  color: #a6adc8;
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin: 0 3px;
+  border: 1px solid rgba(255, 255, 255, 0.02);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.workspace-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #cdd6f4;
+}
+.workspace-button.active {
+  background: linear-gradient(135deg, #b4befe, #cba6f7);
+  color: #11111b;
+  font-weight: bold;
+  box-shadow: 0 0 8px rgba(203, 166, 247, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.bar-widget {
+  color: #cdd6f4;
+  padding: 6px 12px;
+  margin: 0 4px;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.02);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bar-widget:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+.bar-widget.muted, .bar-widget.disconnected, .bar-widget.low-battery {
+  color: #7f849c;
+}
+.bar-widget.charging {
+  color: #a6e3a1;
+}
+.bar-widget.danger {
+  color: #f38ba8;
+  border-color: rgba(243, 139, 168, 0.3);
+}
+.bar-widget label {
+  font-family: "Outfit", "Inter", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+}

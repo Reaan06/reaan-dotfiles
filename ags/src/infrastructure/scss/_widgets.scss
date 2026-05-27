@@ -1,0 +1,61 @@
+@use "variables" as *;
+
+// Estilos de WorkspaceWidget
+.workspace-button {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: $text-secondary;
+    border-radius: 8px;
+    padding: 6px 12px;
+    margin: 0 3px;
+    border: 1px solid rgba(255, 255, 255, 0.02);
+    transition: all $transition-speed $transition-curve;
+
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+        color: $text-primary;
+    }
+
+    &.active {
+        background: $accent-gradient;
+        color: #11111b;
+        font-weight: bold;
+        box-shadow: 0 0 8px $border-glow;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+}
+
+// Estilo de Widgets Informativos en la barra (Batería, Audio, Red)
+.bar-widget {
+    color: $text-primary;
+    padding: 6px 12px;
+    margin: 0 4px;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.02);
+    transition: all $transition-speed $transition-curve;
+
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.05);
+    }
+
+    // Estados dinámicos
+    &.muted, &.disconnected, &.low-battery {
+        color: $text-muted;
+    }
+
+    &.charging {
+        color: $success-color;
+    }
+
+    &.danger {
+        color: $danger-color;
+        border-color: rgba($danger-color, 0.3);
+    }
+
+    label {
+        font-family: $font-family;
+        font-size: 13px;
+        font-weight: 600;
+    }
+}

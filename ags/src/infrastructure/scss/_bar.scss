@@ -1,0 +1,19 @@
+@use "variables" as *;
+
+.bar-window {
+    background-color: transparent;
+}
+
+.bar-container {
+    background-color: $bg-color;
+    border: 1px solid $border-color;
+    border-radius: 16px;
+    margin: 8px 12px;
+    padding: 6px 16px;
+    box-shadow: $box-shadow;
+    transition: all $transition-speed $transition-curve;
+
+    &:hover {
+        border-color: rgba(203, 166, 247, 0.2);
+    }
+}

@@ -5,4 +5,5 @@ PanelConnector 1.0 PanelConnector.qml
 CircularGauge 1.0 CircularGauge.qml
 NetworkNode 1.0 NetworkNode.qml
 GraphCanvas 1.0 GraphCanvas.qml
+WallpaperCard 1.0 WallpaperCard.qml
 

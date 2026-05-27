@@ -21,13 +21,17 @@ ShellRoot {
     property string dockMonitor: ""
     property bool btVisible: false
     property string btMonitor: ""
+    property bool wallpaperVisible: false
+    property string wallpaperMonitor: ""
     property bool amAnimating: false
     property bool f2Animating: false
     property bool btAnimating: false
+    property bool wpAnimating: false
     property string _lastAmState: ""
     property string _lastF2State: ""
     property string _lastDockState: ""
     property string _lastBtState: ""
+    property string _lastWallpaperState: ""
 
     // ── Global Palette ──
     property color cPill:    Qt.rgba(0.16, 0.16, 0.18, 0.92)
@@ -77,16 +81,17 @@ ShellRoot {
 
     Process {
         id: amStateProc
-        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-dock-toggle 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null"]
+        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-dock-toggle 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-wallpaper-picker 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var parts = text.trim().split("---")
-                if (parts.length < 4) return
+                if (parts.length < 5) return
                 
                 var amRawFull = parts[0].trim()
                 var f2RawFull = parts[1].trim()
                 var dockRawFull = parts[2].trim()
                 var btRawFull = parts[3].trim()
+                var wpRawFull = parts[4].trim()
 
                 if (amRawFull !== _lastAmState) {
                     _lastAmState = amRawFull
@@ -125,6 +130,16 @@ ShellRoot {
                     else if (newValBt) { btAnimating = false; btHideTimer.stop() }
                     btVisible = newValBt
                 }
+                if (wpRawFull !== _lastWallpaperState) {
+                    _lastWallpaperState = wpRawFull
+                    var wpParts = wpRawFull.split(" ")
+                    var wpRaw = wpParts[0]
+                    wallpaperMonitor = wpParts.length > 1 ? wpParts[1] : ""
+                    var newValWp = (wpRaw === "visible")
+                    if (!newValWp && wallpaperVisible) { wpAnimating = true; wpHideTimer.start() }
+                    else if (newValWp) { wpAnimating = false; wpHideTimer.stop() }
+                    wallpaperVisible = newValWp
+                }
             }
         }
     }
@@ -133,6 +148,7 @@ ShellRoot {
     Timer { id: amHideTimer; interval: 400; onTriggered: amAnimating = false }
     Timer { id: f2HideTimer; interval: 400; onTriggered: f2Animating = false }
     Timer { id: btHideTimer; interval: 400; onTriggered: btAnimating = false }
+    Timer { id: wpHideTimer; interval: 400; onTriggered: wpAnimating = false }
 
     // ── Global: start MPRIS follow daemon (once, not per-monitor) ──
     Process {
@@ -277,6 +293,36 @@ ShellRoot {
                 anchors.fill: parent
                 active: btVisible
                 scale: 1.15 // Bajamos escala para que el layout nativo maneje el espacio extra
+            }
+        }
+    }
+
+    // ── Wallpaper Picker popup (Centered) ──
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            id: wallpaperWin
+            property var modelData
+            screen: modelData
+            visible: (wallpaperVisible || wpAnimating) && screen.name === wallpaperMonitor
+            
+            WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+
+            anchors.top: true; anchors.left: true
+            
+            margins {
+                top: (screen.height - height) / 2
+                left: (screen.width - width) / 2
+            }
+
+            implicitWidth: screen.width * 0.80
+            implicitHeight: screen.height * 0.75
+            
+            exclusionMode: ExclusionMode.Ignore; color: "transparent"
+
+            WallpaperPicker {
+                anchors.fill: parent
+                active: wallpaperVisible
             }
         }
     }
