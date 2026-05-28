@@ -25,7 +25,7 @@ export function AudioWidget(controller: AudioController) {
 
     const unsubscribe = controller.subscribe(update);
 
-    button.setup = (self) => {
+    button.setup = (self: any) => {
         self.connect("destroy", unsubscribe);
     };
 

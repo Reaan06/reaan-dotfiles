@@ -32,7 +32,7 @@ export function NetworkWidget(controller: NetworkController) {
 
     const unsubscribe = controller.subscribe(update);
 
-    button.setup = (self) => {
+    button.setup = (self: any) => {
         self.connect("destroy", unsubscribe);
     };
 

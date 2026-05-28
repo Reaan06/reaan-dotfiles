@@ -29,7 +29,7 @@ export function BatteryWidget(controller: BatteryController) {
 
     const unsubscribe = controller.subscribe(update);
 
-    box.setup = (self) => {
+    box.setup = (self: any) => {
         self.connect("destroy", unsubscribe);
     };
 

@@ -20,7 +20,7 @@ export function WorkspaceWidget(controller: WorkspaceController) {
 
     const unsubscribe = controller.subscribe(update);
 
-    box.setup = (self) => {
+    box.setup = (self: any) => {
         self.connect("destroy", unsubscribe);
     };
 
