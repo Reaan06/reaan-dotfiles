@@ -35,6 +35,8 @@ ShellRoot {
     property int aiUsageSourceAge: -1
     property bool aiUsageLoading: false
     property var lastKnownGood: null
+    property var aiUsageProviders: []
+    property var lastKnownGoodProviders: ({})
     readonly property var aiUsageStatuses: ["ok", "missing", "stale", "locked", "malformed", "schema-error"]
     property bool amAnimating: false
     property bool f2Animating: false
@@ -45,19 +47,13 @@ ShellRoot {
     property string _lastDockState: ""
     property string _lastBtState: ""
     property string _lastWallpaperState: ""
+    property string _lastAiUsageState: ""
+    property string aiUsageToggleMonitor: ""
 
     function toggleAiUsage(monitorName) {
-        if (aiUsageVisible && aiUsageMonitor === monitorName) {
-            aiUsageVisible = false
-            aiUsageAnimating = true
-            aiUsageHideTimer.start()
-            return
-        }
-        aiUsageMonitor = monitorName
-        aiUsageVisible = true
-        aiUsageAnimating = false
-        aiUsageHideTimer.stop()
-        refreshAiUsage()
+        if (aiUsageToggleProcess.running) return
+        aiUsageToggleMonitor = monitorName || ""
+        aiUsageToggleProcess.running = true
     }
 
     function refreshAiUsage() {
@@ -91,6 +87,14 @@ ShellRoot {
         aiUsageError = data && data.error ? data.error : (status === "ok" ? "" : status)
         aiUsageSourceAge = data && typeof data.source_age_seconds === "number"
             ? data.source_age_seconds : -1
+        aiUsageProviders = data && Array.isArray(data.providers) ? data.providers : []
+        var retainedProviders = {}
+        for (var providerId in lastKnownGoodProviders) retainedProviders[providerId] = lastKnownGoodProviders[providerId]
+        for (var i = 0; i < aiUsageProviders.length; i++) {
+            var provider = aiUsageProviders[i]
+            if (provider && provider.status === "ok" && provider.id) retainedProviders[provider.id] = provider
+        }
+        lastKnownGoodProviders = retainedProviders
         if (status === "ok") lastKnownGood = data
         aiUsageLoading = false
     }
@@ -106,6 +110,11 @@ ShellRoot {
                 shellRoot.handleAiUsageOutput("")
             }
         }
+    }
+
+    Process {
+        id: aiUsageToggleProcess
+        command: [runtimePaths.scriptsDir + "/ai-usage-toggle.sh", "toggle", shellRoot.aiUsageToggleMonitor]
     }
 
     Timer {
@@ -166,17 +175,18 @@ ShellRoot {
 
     Process {
         id: amStateProc
-        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-dock-toggle 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-wallpaper-picker 2>/dev/null"]
+        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-dock-toggle 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-wallpaper-picker 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-ai-usage 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var parts = text.trim().split("---")
-                if (parts.length < 5) return
+                if (parts.length < 6) return
                 
                 var amRawFull = parts[0].trim()
                 var f2RawFull = parts[1].trim()
                 var dockRawFull = parts[2].trim()
                 var btRawFull = parts[3].trim()
                 var wpRawFull = parts[4].trim()
+                var aiRawFull = parts[5].trim()
 
                 if (amRawFull !== _lastAmState) {
                     _lastAmState = amRawFull
@@ -224,6 +234,16 @@ ShellRoot {
                     if (!newValWp && wallpaperVisible) { wpAnimating = true; wpHideTimer.start() }
                     else if (newValWp) { wpAnimating = false; wpHideTimer.stop() }
                     wallpaperVisible = newValWp
+                }
+                if (aiRawFull !== _lastAiUsageState) {
+                    _lastAiUsageState = aiRawFull
+                    var aiParts = aiRawFull.split(" ")
+                    var aiRaw = aiParts[0]
+                    aiUsageMonitor = aiParts.length > 1 ? aiParts[1] : ""
+                    var newValAi = (aiRaw === "visible")
+                    if (!newValAi && aiUsageVisible) { aiUsageAnimating = true; aiUsageHideTimer.start() }
+                    else if (newValAi) { aiUsageAnimating = false; aiUsageHideTimer.stop(); refreshAiUsage() }
+                    aiUsageVisible = newValAi
                 }
             }
         }
@@ -292,6 +312,8 @@ ShellRoot {
                 loading: shellRoot.aiUsageLoading
                 sourceAgeSeconds: shellRoot.aiUsageSourceAge
                 snapshot: shellRoot.lastKnownGood
+                providers: shellRoot.aiUsageProviders
+                lastKnownGoodProviders: shellRoot.lastKnownGoodProviders
                 anchorWidth: aiUsageWin.anchorWidth
                 neckOffset: aiUsageWin.worldAnchorX - (aiUsageWin.x + aiUsageWin.width / 2)
                 onRefreshRequested: shellRoot.refreshAiUsage()

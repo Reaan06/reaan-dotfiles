@@ -122,10 +122,15 @@ run_qml_static_cases() {
     ! grep -Fq 'lastKnownGood = null' "$qml/shell.qml" || fail 'AI Usage clears retained totals on failure'
     grep -Fq 'aiUsageMonitor' "$qml/shell.qml" || fail 'AI Usage has no monitor identity'
     grep -Fq 'screen.name === aiUsageMonitor' "$qml/shell.qml" || fail 'AI Usage popup is not same-monitor scoped'
+    grep -Fq 'qs-ai-usage' "$qml/shell.qml" || fail 'shell does not read the Super F4 AI Usage state'
+    grep -Fq 'lastKnownGoodProviders' "$qml/shell.qml" || fail 'AI Usage does not retain providers independently'
     grep -Fq 'PanelConnector' "$qml/AiUsageView.qml" || fail 'AI Usage view has no panel connector'
     for status in ok missing stale locked malformed schema-error; do
         grep -Fq "\"$status\"" "$qml/shell.qml" || fail "missing exact AI Usage status: $status"
     done
+    grep -Fq 'ChatGPT/Codex' "$qml/AiUsageView.qml" || fail 'AI Usage view does not label ChatGPT/Codex'
+    grep -Fq 'Claude' "$qml/AiUsageView.qml" || fail 'AI Usage view does not label Claude'
+    grep -Fq 'OpenCode' "$qml/AiUsageView.qml" || fail 'AI Usage view does not label OpenCode'
     grep -Fq 'scriptsDir' "$runtime" || fail 'RuntimePaths does not expose scriptsDir'
     ! grep -Eq 'XDG_DATA_HOME|opencode|database|\.db' "$runtime" \
         || fail 'RuntimePaths owns OpenCode data resolution'
@@ -138,11 +143,132 @@ run_runner_static_cases() {
         "$ROOT/openspec/config.yaml" || fail 'configured runner does not append the AI Usage test'
 }
 
+run_provider_cases() {
+    PYTHONDONTWRITEBYTECODE=1 HOME="$HOME" CODEX_HOME="$TMP/codex" CLAUDE_CONFIG_DIR="$TMP/claude" \
+        SCRIPT="$SCRIPT" TMP="$TMP" python3 - <<'PY'
+import importlib.util
+import json
+import os
+import urllib.error
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("ai_usage", os.environ["SCRIPT"])
+collector = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(collector)
+
+root = Path(os.environ["TMP"])
+codex_dir = Path(os.environ["CODEX_HOME"])
+claude_dir = Path(os.environ["CLAUDE_CONFIG_DIR"])
+codex_dir.mkdir(parents=True)
+claude_dir.mkdir(parents=True)
+codex_secret = "codex-fixture-secret"
+claude_secret = "claude-fixture-secret"
+now = datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc)
+future = now + timedelta(hours=2)
+future_ms = int(future.timestamp() * 1000)
+codex_auth = codex_dir / "auth.json"
+claude_auth = claude_dir / ".credentials.json"
+codex_auth.write_text(json.dumps({"tokens": {"access_token": codex_secret, "account_id": "fixture-account"}}))
+claude_auth.write_text(json.dumps({"claudeAiOauth": {"accessToken": claude_secret, "expiresAt": future_ms}}))
+
+class Response:
+    def __init__(self, body, status=200):
+        self.body = body.encode()
+        self.status = status
+    def __enter__(self): return self
+    def __exit__(self, *args): return False
+    def read(self, limit): return self.body[:limit]
+    def getcode(self): return self.status
+
+codex_body = json.dumps({"rate_limit": {"primary_window": {"used_percent": 42, "reset_at": future_ms}, "secondary_window": {"used_percent": 17, "reset_at": future_ms}}})
+claude_body = json.dumps({"five_hour": {"utilization": 31, "resets_at": future.isoformat().replace("+00:00", "Z")}, "seven_day": {"utilization": 12, "resets_at": future.isoformat().replace("+00:00", "Z")}})
+
+def opener(request, timeout):
+    assert timeout == collector.NETWORK_TIMEOUT_SECONDS
+    authorization = request.get_header("Authorization")
+    assert authorization in ("Bearer " + codex_secret, "Bearer " + claude_secret)
+    if "chatgpt.com" in request.full_url:
+        return Response(codex_body)
+    return Response(claude_body)
+
+collector.urllib.request.urlopen = opener
+chatgpt = collector.codex_usage(now)
+claude = collector.claude_usage(now)
+assert chatgpt["status"] == "ok" and chatgpt["windows"][0]["utilization"] == 42
+assert claude["status"] == "ok" and claude["windows"][0]["utilization"] == 31
+serialized = json.dumps({"chatgpt": chatgpt, "claude": claude})
+assert codex_secret not in serialized and claude_secret not in serialized
+
+def offline(request, timeout):
+    if "chatgpt.com" in request.full_url:
+        return Response(codex_body)
+    raise urllib.error.URLError("offline fixture")
+
+collector.urllib.request.urlopen = offline
+assert collector.codex_usage(now)["status"] == "ok"
+assert collector.claude_usage(now)["status"] == "offline"
+
+def malformed(request, timeout):
+    if "chatgpt.com" in request.full_url:
+        return Response("[]")
+    raise urllib.error.HTTPError(request.full_url, 429, "rate limited fixture", {}, None)
+
+collector.urllib.request.urlopen = malformed
+assert collector.codex_usage(now)["status"] == "malformed"
+assert collector.claude_usage(now)["status"] == "rate-limited"
+
+codex_auth.unlink()
+claude_auth.unlink()
+collector.shutil.which = lambda command: None
+missing_codex = collector.codex_usage(now)
+missing_claude = collector.claude_usage(now)
+assert missing_codex["status"] == "missing" and missing_codex["cli_status"] == "unavailable"
+assert missing_claude["status"] == "missing" and missing_claude["cli_status"] == "unavailable"
+
+codex_auth.write_text(json.dumps({"tokens": {}}))
+claude_auth.write_text(json.dumps({"claudeAiOauth": {"accessToken": claude_secret, "expiresAt": 1}}))
+assert collector.codex_usage(now)["status"] == "auth"
+assert collector.claude_usage(now)["status"] == "expired"
+print("PASS: provider isolation, mocked network statuses, and credential non-leakage")
+PY
+}
+
+run_toggle_cases() {
+    local bin="$TMP/toggle-bin"
+    mkdir -p "$bin" "$TMP/runtime"
+    cat > "$bin/hyprctl" <<'EOF'
+#!/bin/bash
+printf '[{"name":"HDMI-A-1","focused":true}]\n'
+EOF
+    chmod +x "$bin/hyprctl"
+    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" \
+        "$ROOT/dot_config/scripts/ai-usage-toggle.sh" toggle
+    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'visible HDMI-A-1' ]] || fail 'Super F4 did not write the visible state'
+    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" \
+        "$ROOT/dot_config/scripts/ai-usage-toggle.sh" toggle
+    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'hidden HDMI-A-1' ]] || fail 'Super F4 did not toggle the hidden state'
+    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" \
+        "$ROOT/dot_config/scripts/ai-usage-toggle.sh" show DP-1
+    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'visible DP-1' ]] || fail 'explicit monitor selection was ignored'
+    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" \
+        "$ROOT/dot_config/scripts/ai-usage-toggle.sh" toggle HDMI-A-1
+    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'visible HDMI-A-1' ]] || fail 'toggle did not move the popup to the requested monitor'
+    grep -Fq 'bind = Super, F4, exec, ~/.config/scripts/ai-usage-toggle.sh toggle' "$ROOT/dot_config/hypr/keybinds.conf" \
+        || fail 'Super F4 binding is missing'
+    grep -Fq 'bindn = , F4, exec, ~/.config/scripts/fn-guard.sh mic_toggle' "$ROOT/dot_config/hypr/keybinds.conf" \
+        || fail 'plain F4 microphone fallback was hijacked'
+}
+
 create_valid_db
 CHECKSUM_BEFORE="$(sha256sum "$DB")"
 DAY_OUTPUT="$(collect day)"
 jq -e '
     .status == "ok" and .period == "day" and
+    (.version == 1) and
+    (.providers | length == 3) and
+    ([.providers[].label] | sort) == ["ChatGPT/Codex", "Claude", "OpenCode"] and
+    ([.providers[].id] | sort) == ["chatgpt", "claude", "opencode"] and
     (.generated_at | endswith("Z")) and
     (.source_age_seconds | type == "number") and
     (.totals | type == "object") and
@@ -215,11 +341,18 @@ assert_status day schema-error
 create_valid_db
 run_qml_static_cases
 run_runner_static_cases
+run_provider_cases
+run_toggle_cases
 grep -Fq 'sqlite3' "$SCRIPT" || fail 'adapter does not use Python sqlite3'
 grep -Fq 'mode=ro' "$SCRIPT" || fail 'adapter is not explicitly read-only'
 grep -Fq 'query_only' "$SCRIPT" || fail 'adapter does not enable SQLite query_only'
-! grep -Eq 'subprocess|socket|urllib|requests|https?://' "$SCRIPT" \
-    || fail 'adapter contains a network or shell execution boundary'
+grep -Fq 'urllib.request.urlopen' "$SCRIPT" || fail 'collector does not own the network boundary'
+grep -Fq 'https://chatgpt.com/backend-api/wham/usage' "$SCRIPT" || fail 'Codex endpoint is not explicit'
+grep -Fq 'https://api.anthropic.com/api/oauth/usage' "$SCRIPT" || fail 'Claude endpoint is not explicit'
+! grep -Eq 'subprocess|socket|requests' "$SCRIPT" \
+    || fail 'collector contains an unexpected shell or third-party boundary'
+! grep -Eq 'print\([^)]*(token|credential)' "$SCRIPT" \
+    || fail 'collector prints credential material'
 ! grep -Fq -- '--db' "$SCRIPT" || fail 'adapter exposes a database-path argument'
 
 APP_TRACKER_HASH="$(git -C "$ROOT" hash-object dot_config/scripts/app_tracker.py)"
@@ -229,4 +362,4 @@ APP_USAGE_VIEW_HASH="$(git -C "$ROOT" hash-object dot_config/quickshell/AppUsage
 [[ "$(git -C "$ROOT" hash-object dot_config/quickshell/AppUsageView.qml)" == "$APP_USAGE_VIEW_HASH" ]] \
     || fail 'application usage view changed during the fixture run'
 [[ "$(git -C "$ROOT" status --porcelain=v1)" == "$BEFORE" ]] || fail 'test changed the worktree'
-printf 'PASS: read-only local OpenCode AI usage adapter (%s statuses, aggregation, privacy, checksum)\n' 6
+printf 'PASS: AI Usage providers, OpenCode aggregation, privacy, and Super F4 state\n'
