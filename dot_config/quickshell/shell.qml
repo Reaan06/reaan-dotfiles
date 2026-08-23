@@ -2,11 +2,14 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
 import QtQuick
+import "components"
 
 // Punto de entrada de Quickshell.
 
 ShellRoot {
     id: shellRoot
+
+    RuntimePaths { id: runtimePaths }
 
     // ── Global Anchor Registry ──
     // Almacena las coordenadas locales de los módulos (respecto a la barra) por monitor.
@@ -23,6 +26,18 @@ ShellRoot {
     property string btMonitor: ""
     property bool wallpaperVisible: false
     property string wallpaperMonitor: ""
+    property bool aiUsageVisible: false
+    property bool aiUsageAnimating: false
+    property string aiUsageMonitor: ""
+    property string aiUsagePeriod: "day"
+    property string aiUsageStatus: "missing"
+    property string aiUsageError: "source-missing"
+    property int aiUsageSourceAge: -1
+    property bool aiUsageLoading: false
+    property var lastKnownGood: null
+    property var aiUsageProviders: []
+    property var lastKnownGoodProviders: ({})
+    readonly property var aiUsageStatuses: ["ok", "missing", "stale", "locked", "malformed", "schema-error"]
     property bool amAnimating: false
     property bool f2Animating: false
     property bool btAnimating: false
@@ -32,6 +47,85 @@ ShellRoot {
     property string _lastDockState: ""
     property string _lastBtState: ""
     property string _lastWallpaperState: ""
+    property string _lastAiUsageState: ""
+    property string aiUsageToggleMonitor: ""
+
+    function toggleAiUsage(monitorName) {
+        if (aiUsageToggleProcess.running) return
+        aiUsageToggleMonitor = monitorName || ""
+        aiUsageToggleProcess.running = true
+    }
+
+    function refreshAiUsage() {
+        if (aiUsageProcess.running) return
+        aiUsageLoading = true
+        aiUsageProcess.running = true
+    }
+
+    function setAiUsagePeriod(period) {
+        if (period !== "day" && period !== "week" && period !== "month") return
+        aiUsagePeriod = period
+        refreshAiUsage()
+    }
+
+    function validAiUsageTotals(totals) {
+        if (!totals || typeof totals !== "object") return false
+        var keys = ["cost", "input_tokens", "output_tokens", "reasoning_tokens", "cache_tokens"]
+        for (var i = 0; i < keys.length; i++) {
+            if (typeof totals[keys[i]] !== "number" || !isFinite(totals[keys[i]])) return false
+        }
+        return true
+    }
+
+    function handleAiUsageOutput(raw) {
+        var data = null
+        try { data = JSON.parse(raw) } catch (error) { data = null }
+        var status = data && aiUsageStatuses.indexOf(data.status) >= 0 ? data.status : "malformed"
+        if (status === "ok" && !validAiUsageTotals(data.totals)) status = "malformed"
+
+        aiUsageStatus = status
+        aiUsageError = data && data.error ? data.error : (status === "ok" ? "" : status)
+        aiUsageSourceAge = data && typeof data.source_age_seconds === "number"
+            ? data.source_age_seconds : -1
+        aiUsageProviders = data && Array.isArray(data.providers) ? data.providers : []
+        var retainedProviders = {}
+        for (var providerId in lastKnownGoodProviders) retainedProviders[providerId] = lastKnownGoodProviders[providerId]
+        for (var i = 0; i < aiUsageProviders.length; i++) {
+            var provider = aiUsageProviders[i]
+            if (provider && provider.status === "ok" && provider.id) retainedProviders[provider.id] = provider
+        }
+        lastKnownGoodProviders = retainedProviders
+        if (status === "ok") lastKnownGood = data
+        aiUsageLoading = false
+    }
+
+    Process {
+        id: aiUsageProcess
+        command: ["python3", runtimePaths.scriptsDir + "/ai_usage.py", "--period", aiUsagePeriod]
+        stdout: StdioCollector {
+            onStreamFinished: shellRoot.handleAiUsageOutput(text.trim())
+        }
+        onExited: function(exitCode) {
+            if (exitCode !== 0 && aiUsageLoading) {
+                shellRoot.handleAiUsageOutput("")
+            }
+        }
+    }
+
+    Process {
+        id: aiUsageToggleProcess
+        command: [runtimePaths.scriptsDir + "/ai-usage-toggle.sh", "toggle", shellRoot.aiUsageToggleMonitor]
+    }
+
+    Timer {
+        id: aiUsageTimer
+        interval: 300000
+        running: aiUsageVisible
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: refreshAiUsage()
+    }
+    Timer { id: aiUsageHideTimer; interval: 400; onTriggered: aiUsageAnimating = false }
 
     // ── Global Palette ──
     property color cPill:    Qt.rgba(0.16, 0.16, 0.18, 0.92)
@@ -81,17 +175,18 @@ ShellRoot {
 
     Process {
         id: amStateProc
-        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-dock-toggle 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-wallpaper-picker 2>/dev/null"]
+        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-dock-toggle 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-wallpaper-picker 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-ai-usage 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var parts = text.trim().split("---")
-                if (parts.length < 5) return
+                if (parts.length < 6) return
                 
                 var amRawFull = parts[0].trim()
                 var f2RawFull = parts[1].trim()
                 var dockRawFull = parts[2].trim()
                 var btRawFull = parts[3].trim()
                 var wpRawFull = parts[4].trim()
+                var aiRawFull = parts[5].trim()
 
                 if (amRawFull !== _lastAmState) {
                     _lastAmState = amRawFull
@@ -140,6 +235,16 @@ ShellRoot {
                     else if (newValWp) { wpAnimating = false; wpHideTimer.stop() }
                     wallpaperVisible = newValWp
                 }
+                if (aiRawFull !== _lastAiUsageState) {
+                    _lastAiUsageState = aiRawFull
+                    var aiParts = aiRawFull.split(" ")
+                    var aiRaw = aiParts[0]
+                    aiUsageMonitor = aiParts.length > 1 ? aiParts[1] : ""
+                    var newValAi = (aiRaw === "visible")
+                    if (!newValAi && aiUsageVisible) { aiUsageAnimating = true; aiUsageHideTimer.start() }
+                    else if (newValAi) { aiUsageAnimating = false; aiUsageHideTimer.stop(); refreshAiUsage() }
+                    aiUsageVisible = newValAi
+                }
             }
         }
     }
@@ -170,6 +275,50 @@ ShellRoot {
             implicitHeight: 44
             color: "transparent"
             StatusBar { anchors.fill: parent }
+        }
+    }
+
+    // ── Local OpenCode AI Usage popup ──
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            id: aiUsageWin
+            property var modelData
+            screen: modelData
+            visible: (aiUsageVisible || aiUsageAnimating) && screen.name === aiUsageMonitor
+            anchors.top: true; anchors.left: true
+            WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+
+            property real worldAnchorX: 16 + (shellRoot.anchors[screen.index]
+                ? shellRoot.anchors[screen.index].aiUsage : 0)
+            property real anchorWidth: shellRoot.anchors[screen.index]
+                ? shellRoot.anchors[screen.index].aiUsageWidth : 120
+
+            margins {
+                top: 48
+                left: Math.max(16, Math.min(screen.width - width - 16, worldAnchorX - (width / 2)))
+            }
+            Behavior on margins.left { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+            implicitWidth: Math.max(430, screen.width * 0.34)
+            implicitHeight: Math.max(520, screen.height * 0.58)
+            exclusionMode: ExclusionMode.Ignore; color: "transparent"
+
+            AiUsageView {
+                anchors.fill: parent
+                period: shellRoot.aiUsagePeriod
+                status: shellRoot.aiUsageStatus
+                errorCode: shellRoot.aiUsageError
+                loading: shellRoot.aiUsageLoading
+                sourceAgeSeconds: shellRoot.aiUsageSourceAge
+                snapshot: shellRoot.lastKnownGood
+                providers: shellRoot.aiUsageProviders
+                lastKnownGoodProviders: shellRoot.lastKnownGoodProviders
+                anchorWidth: aiUsageWin.anchorWidth
+                neckOffset: aiUsageWin.worldAnchorX - (aiUsageWin.x + aiUsageWin.width / 2)
+                onRefreshRequested: shellRoot.refreshAiUsage()
+                onPeriodSelected: shellRoot.setAiUsagePeriod(selectedPeriod)
+            }
         }
     }
 
