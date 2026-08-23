@@ -48,10 +48,12 @@ Item {
     // Global coordinate helpers for panel alignment
     readonly property real mprisCenterWorldX: mprisAnchor ? getCenterWorldX(mprisAnchor) : 0
     readonly property real clockCenterWorldX: clockAnchor ? getCenterWorldX(clockAnchor) : 0
+    readonly property real aiUsageCenterWorldX: aiUsageAnchor ? getCenterWorldX(aiUsageAnchor) : 0
 
     // Update anchors when relevant properties change
     onMprisCenterWorldXChanged: updateAnchors()
     onClockCenterWorldXChanged: updateAnchors()
+    onAiUsageCenterWorldXChanged: updateAnchors()
     
     // Also update when visibility changes
     Connections {
@@ -61,6 +63,11 @@ Item {
     }
     Connections {
         target: clockAnchor
+        function onVisibleChanged() { updateAnchors() }
+        function onWidthChanged() { updateAnchors() }
+    }
+    Connections {
+        target: aiUsageAnchor
         function onVisibleChanged() { updateAnchors() }
         function onWidthChanged() { updateAnchors() }
     }
@@ -76,7 +83,9 @@ Item {
             mpris: mprisCenterWorldX, 
             mprisWidth: mprisAnchor ? mprisAnchor.width : 0,
             clock: clockCenterWorldX,
-            clockWidth: clockAnchor ? clockAnchor.width : 0
+            clockWidth: clockAnchor ? clockAnchor.width : 0,
+            aiUsage: aiUsageCenterWorldX,
+            aiUsageWidth: aiUsageAnchor ? aiUsageAnchor.width : 0
         }
         shellRoot.anchors = data // Trigger update
     }
@@ -291,6 +300,12 @@ Item {
 
     function truncate(str, max) {
         return str.length > max ? str.substring(0, max - 1) + "…" : str
+    }
+
+    function aiUsageSummary() {
+        var totals = shellRoot.lastKnownGood && shellRoot.lastKnownGood.totals
+        if (!totals) return shellRoot.aiUsageStatus === "ok" ? "—" : shellRoot.aiUsageStatus
+        return "$" + Number(totals.cost).toFixed(2)
     }
 
 
@@ -526,7 +541,30 @@ Item {
 
         Item { Layout.fillWidth: true }
 
-        // ──────── 5. CAJA UNIFICADA DERECHA ────────
+        // ──────── 5. LOCAL OPENCODE AI USAGE ────────
+        Pill {
+            id: aiUsageAnchor
+            pillColor: root.cPill; hoverColor: root.cHover; hPad: 10
+            onClicked: shellRoot.toggleAiUsage(root.parent.screen.name)
+
+            Row {
+                spacing: 5
+                Text {
+                    text: "󰚩"
+                    font.family: root.font; font.pixelSize: 14; color: root.cTeal
+                }
+                Text {
+                    text: "AI Usage"
+                    font.family: root.font; font.pixelSize: 11; font.bold: true; color: root.cText
+                }
+                Text {
+                    text: root.aiUsageSummary()
+                    font.family: root.font; font.pixelSize: 10; color: root.cSub
+                }
+            }
+        }
+
+        // ──────── 6. CAJA UNIFICADA DERECHA ────────
         // Tray + Teclado + WiFi + Bluetooth + Batería + Volumen
         // Todo en un solo Rectangle con separadores internos
         Rectangle {
@@ -642,7 +680,7 @@ Item {
             }
         }
 
-        // ──────── 6. POWER (pill separada) ────────
+        // ──────── 7. POWER (pill separada) ────────
         Pill {
             pillColor: root.cPill; hoverColor: Qt.rgba(0.95, 0.55, 0.66, 0.15); hPad: 10
             onClicked: aPower.running = true

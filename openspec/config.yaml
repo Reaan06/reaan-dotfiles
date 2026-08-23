@@ -1,0 +1,50 @@
+schema: spec-driven
+
+context: |
+  Project: reaan-dotfiles-quickshell
+  Stack: Hyprland dotfiles with Quickshell, Bash, Python, and QML helpers.
+  Architecture: declarative desktop config under dot_config/ plus automation scripts.
+  Testing: Bash smoke and integration scripts in tests/ using jq and system commands.
+  Style: Keep shell scripts Bash-safe; keep QML and Python helpers focused and small.
+
+strict_tdd: true
+
+testing:
+  runner:
+    command: "bash tests/test_quickshell_exec.sh && bash tests/test_bt_json.sh && bash tests/test_wifi_scan.sh && bash tests/test_wallpaper_flow.sh && bash tests/test_ai_usage.sh"
+    framework: "Bash smoke tests"
+  layers:
+    unit: true
+    integration: true
+    e2e: false
+  coverage:
+    available: false
+    command: ""
+  quality:
+    linter: false
+    type_checker: false
+    formatter: false
+  graphical:
+    command: "bash tests/test_graphical_runtime.sh"
+    required_when_available: true
+
+rules:
+  proposal:
+    - Include rollback notes for risky changes.
+  specs:
+    - Use Given/When/Then scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+  design:
+    - Document boundaries between QML, Bash, and Python helpers.
+    - Include rationale for state propagation or process boundaries.
+  tasks:
+    - Group by phase and keep tasks session-sized.
+  apply:
+    tdd: true
+    test_command: "bash tests/test_quickshell_exec.sh && bash tests/test_bt_json.sh && bash tests/test_wifi_scan.sh && bash tests/test_wallpaper_flow.sh"
+  verify:
+    test_command: "bash tests/test_quickshell_exec.sh && bash tests/test_bt_json.sh && bash tests/test_wifi_scan.sh && bash tests/test_wallpaper_flow.sh"
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas.
