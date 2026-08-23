@@ -9,6 +9,8 @@ Rectangle {
     id: root
     property bool active: false
     property var wallpapers: []
+
+    RuntimePaths { id: runtimePaths }
     
     color: Qt.rgba(shellRoot.cPill.r, shellRoot.cPill.g, shellRoot.cPill.b, 0.85)
     radius: 32; border.color: Qt.rgba(1,1,1,0.1); border.width: 1
@@ -29,7 +31,7 @@ Rectangle {
 
     Process {
         id: listProc
-        command: ["python3", "/home/reaan/.config/scripts/wallpaper_bridge.py", "list"]
+        command: ["python3", runtimePaths.scriptsDir + "/wallpaper_bridge.py", "list"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -42,11 +44,44 @@ Rectangle {
     onActiveChanged: if (active) listProc.running = true
 
     Process { id: applyProc }
-    Process { id: hideProc }
+
+    Process {
+        id: hideProc
+        command: ["tee", runtimePaths.runtimeDir + "/qs-wallpaper-picker"]
+        stdinEnabled: true
+        onRunningChanged: if (running) hideProc.write("hidden\n")
+    }
     
     Process {
         id: uploadProc
         onExited: listProc.running = true
+    }
+
+    Process {
+        id: chooserProc
+        command: ["zenity", "--file-selection", "--title", "Select Wallpaper", "--file-filter", "Images | *.jpg *.jpeg *.png *.webp"]
+        stdout: StdioCollector {
+            onStreamFinished: root.uploadSelectedPath(text)
+        }
+    }
+
+    function uploadSelectedPath(selectedPath) {
+        var selected = selectedPath.trim()
+        var rootPath = runtimePaths.wallpaperRoot.replace(/\/+$/, "")
+        var rootPrefix = rootPath + "/"
+        if (!selected || !selected.startsWith(rootPrefix)) {
+            console.log("Ignoring wallpaper selection outside the approved root")
+            return
+        }
+
+        var relativePath = selected.slice(rootPrefix.length)
+        if (!relativePath || relativePath.startsWith("../") || relativePath.indexOf("/../") !== -1) {
+            console.log("Ignoring invalid wallpaper selection")
+            return
+        }
+
+        uploadProc.command = ["python3", runtimePaths.scriptsDir + "/wallpaper_bridge.py", "upload", relativePath]
+        uploadProc.running = true
     }
 
     Connections {
@@ -81,14 +116,12 @@ Rectangle {
                 ActionPill {
                     iconGlyph: "󰈔"; label: "Upload"
                     onClicked: {
-                        uploadProc.command = ["sh", "-c", "FILE=$(zenity --file-selection --title='Select Wallpaper' --file-filter='Images | *.jpg *.jpeg *.png *.webp'); [ -n \"$FILE\" ] && python3 /home/reaan/.config/scripts/wallpaper_bridge.py upload \"$FILE\""]
-                        uploadProc.running = true
+                        chooserProc.running = true
                     }
                 }
                 ActionPill {
                     iconGlyph: "󰅖"; label: "Close"
                     onClicked: {
-                        hideProc.command = ["sh", "-c", "echo 'hidden' > ${XDG_RUNTIME_DIR:-/tmp}/qs-wallpaper-picker"]
                         hideProc.running = true
                     }
                 }
@@ -110,16 +143,15 @@ Rectangle {
                 name: modelData.name
                 path: modelData.path
                 isActive: GridView.isCurrentItem
-                onClicked: applySelected(modelData.path)
+                onClicked: applySelected(modelData.relativePath)
 
-                Keys.onEnterPressed: applySelected(modelData.path)
-                Keys.onReturnPressed: applySelected(modelData.path)
+                Keys.onEnterPressed: applySelected(modelData.relativePath)
+                Keys.onReturnPressed: applySelected(modelData.relativePath)
             }
 
             function applySelected(path) {
-                applyProc.command = ["/home/reaan/.config/scripts/apply-wallpaper.sh", path]
+                applyProc.command = [runtimePaths.scriptsDir + "/apply-wallpaper.sh", path]
                 applyProc.running = true
-                hideProc.command = ["sh", "-c", "echo 'hidden' > ${XDG_RUNTIME_DIR:-/tmp}/qs-wallpaper-picker"]
                 hideProc.running = true
             }
         }

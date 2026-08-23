@@ -1,5 +1,10 @@
-#!/bin/bash
-# tests/test_bt_json.sh — Test for bt-manager.sh JSON output
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/bt-json.XXXXXX")"
+BEFORE="$(git -C "$ROOT" status --porcelain=v1)"
+trap 'rm -rf "$TMP"' EXIT
 
 SCAN_FEED=""
 
@@ -57,12 +62,8 @@ SCAN_FEED=$'[CHG] Device AA:BB:CC:DD:EE:FF Name: Mi Alias BT
 '
 export SCAN_FEED
 
-cat <<EOF > bt_manager_test_wrapper.sh
-$(cat dot_config/scripts/bt-manager.sh)
-EOF
-
 echo "Running scan test..."
-OUTPUT_SCAN=$(bash bt_manager_test_wrapper.sh scan)
+OUTPUT_SCAN=$(bash "$ROOT/dot_config/scripts/bt-manager.sh" scan)
 echo "Scan Output: $OUTPUT_SCAN"
 
 echo "$OUTPUT_SCAN" | jq -e '. | type == "array"' > /dev/null || { echo "Scan output is not an array"; exit 1; }
@@ -86,7 +87,7 @@ echo "$ITEM3" | jq -e '.name == "CC-DD-EE-FF-00-11"' > /dev/null || { echo "Item
 echo "$ITEM3" | jq -e '.name != "Dispositivo Bluetooth"' > /dev/null || { echo "Item 3 must not use generic placeholder"; exit 1; }
 
 echo "Running info test..."
-OUTPUT_INFO=$(bash bt_manager_test_wrapper.sh info)
+OUTPUT_INFO=$(bash "$ROOT/dot_config/scripts/bt-manager.sh" info)
 echo "Info Output: $OUTPUT_INFO"
 
 echo "$OUTPUT_INFO" | jq -e '.status == "connected"' > /dev/null || { echo "Info status mismatch"; exit 1; }
@@ -94,5 +95,5 @@ echo "$OUTPUT_INFO" | jq -e '.name == "Mi Alias BT"' > /dev/null || { echo "Info
 echo "$OUTPUT_INFO" | jq -e '.battery == "80"' > /dev/null || { echo "Info battery mismatch"; exit 1; }
 echo "$OUTPUT_INFO" | jq -e '.icon == "audio-card"' > /dev/null || { echo "Info icon mismatch"; exit 1; }
 
-rm bt_manager_test_wrapper.sh
-echo "All tests passed!"
+[[ "$(git -C "$ROOT" status --porcelain=v1)" == "$BEFORE" ]] || { echo "Test changed the worktree" >&2; exit 1; }
+echo "PASS: hermetic Bluetooth JSON boundary"

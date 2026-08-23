@@ -1,81 +1,108 @@
 #!/usr/bin/env python3
 """
 Wallpaper Bridge - Backend for the Quickshell Wallpaper Picker.
-Handles listing images in the dotfiles wallpaper folder and uploading new ones.
+Handles listing approved images and uploading approved relative paths.
 """
-import os
 import sys
 import json
 import shutil
 from pathlib import Path
 
-# Use HOME from env for maximum reliability in Quickshell/systemd environments
-HOME = os.environ.get('HOME', str(Path.home()))
-WALLPAPER_DIR = Path(HOME) / "reaan-dotfiles" / "wallps"
+from runtime_paths import paths
+
+
+WALLPAPER_DIR = Path(paths()["wallpaper_root"])
+
+
+class WallpaperPathError(ValueError):
+    pass
+
+
+def approved_path(value):
+    source = Path(value)
+    if source.is_absolute():
+        raise WallpaperPathError("Wallpaper path must be relative to the approved root.")
+    if ".." in source.parts:
+        raise WallpaperPathError("Wallpaper path traversal is not allowed.")
+    root = WALLPAPER_DIR.resolve()
+    resolved = (root / source).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as error:
+        raise WallpaperPathError("Wallpaper path resolves outside the approved root.") from error
+    return resolved
+
 
 def list_wallpapers():
     """Returns a JSON list of available wallpapers."""
-    # Log to a file for debugging Quickshell execution
-    log_path = Path(HOME) / ".config/quickshell/bridge.log"
-    
     if not WALLPAPER_DIR.exists():
-        with open(log_path, 'a') as f:
-            f.write(f"Error: Directory {WALLPAPER_DIR} does not exist\n")
         return json.dumps([])
-    
+
     wallpapers = []
     # Supported image extensions
     extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
-    
+
     try:
         for file in WALLPAPER_DIR.iterdir():
             if file.is_file() and file.suffix.lower() in extensions:
+                resolved = approved_path(file.name)
                 wallpapers.append({
                     "name": file.stem.replace('_', ' ').capitalize(),
                     "filename": file.name,
-                    "path": str(file.absolute())
+                    "path": str(resolved),
+                    "relativePath": file.name
                 })
-        
+
         # Sort by name for a consistent UI
         return json.dumps(sorted(wallpapers, key=lambda x: x['name']), indent=2)
-    except Exception as e:
-        with open(log_path, 'a') as f:
-            f.write(f"Error listing: {str(e)}\n")
-        return json.dumps({"error": str(e)})
+    except WallpaperPathError:
+        raise
+    except OSError as error:
+        raise WallpaperPathError(str(error)) from error
+
 
 def upload_wallpaper(source_path):
-    """Copies an image from source_path to the wallpapers folder."""
-    source = Path(source_path)
-    if not source.exists():
-        return json.dumps({"error": f"Source file does not exist: {source_path}"})
-    
+    """Copies an approved image to the wallpapers folder."""
+    source = approved_path(source_path)
+    if not source.is_file():
+        raise WallpaperPathError("Wallpaper file does not exist.")
+
     # Ensure destination directory exists
     WALLPAPER_DIR.mkdir(parents=True, exist_ok=True)
-    
     target = WALLPAPER_DIR / source.name
     try:
-        shutil.copy2(source, target)
+        if source != target:
+            shutil.copy2(source, target)
         return json.dumps({
-            "success": True, 
+            "success": True,
             "message": f"Uploaded {source.name} successfully",
-            "path": str(target.absolute())
+            "path": str(target),
+            "relativePath": target.name
         })
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    except OSError as error:
+        raise WallpaperPathError(str(error)) from error
+
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: wallpaper_bridge.py [list|upload <path>]")
-        sys.exit(1)
-    
-    cmd = sys.argv[1]
-    if cmd == "list":
-        print(list_wallpapers())
-    elif cmd == "upload" and len(sys.argv) > 2:
-        print(upload_wallpaper(sys.argv[2]))
-    else:
-        print(f"Error: Unknown command '{cmd}' or missing path argument.")
-        sys.exit(1)
+        print("Usage: wallpaper_bridge.py [list|upload <relative-path>]", file=sys.stderr)
+        return 64
+
+    try:
+        cmd = sys.argv[1]
+        if cmd == "list" and len(sys.argv) == 2:
+            print(list_wallpapers())
+            return 0
+        if cmd == "upload" and len(sys.argv) == 3:
+            print(upload_wallpaper(sys.argv[2]))
+            return 0
+    except WallpaperPathError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Error: Unknown command '{sys.argv[1]}' or missing path argument.", file=sys.stderr)
+    return 64
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

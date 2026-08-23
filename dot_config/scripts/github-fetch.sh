@@ -2,56 +2,91 @@
 # ═══════════════════════════════════════════════════════════════
 # github-fetch.sh — GitHub data fetcher (GraphQL v4 primary)
 # ═══════════════════════════════════════════════════════════════
-# Usage: github-fetch.sh <username> [token]
-#   - With token:  Uses GraphQL API v4 for ALL data (single query)
+# Usage: github-fetch.sh <username>
+#   - With token on stdin: Uses GraphQL API v4 for ALL data (single query)
 #   - Without token: Falls back to REST API v3 (public data only)
 # Output: Unified JSON to stdout
 # ═══════════════════════════════════════════════════════════════
 
-USERNAME="$1"
-TOKEN="$2"
+set -euo pipefail
+umask 077
+
+USERNAME="${1:-}"
+TOKEN=""
 
 if [ -z "$USERNAME" ]; then
     echo '{"error":"no_username"}'
     exit 1
 fi
 
+if [[ ! "$USERNAME" =~ ^[A-Za-z0-9-]+$ ]]; then
+    echo '{"error":"invalid_username"}'
+    exit 1
+fi
+
+IFS= read -r TOKEN || true
+
 # Temp dir for storing API responses safely
-TMPDIR=$(mktemp -d /tmp/gh-fetch.XXXXXX)
-trap "rm -rf $TMPDIR" EXIT
+TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/gh-fetch.XXXXXX")
+trap 'rm -rf "$TMPDIR"' EXIT
+CURL_CONFIG="$TMPDIR/curl.conf"
+
+if [ -n "$TOKEN" ]; then
+    printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" > "$CURL_CONFIG"
+fi
+
+curl_request() {
+    local output="$1"
+    shift
+    if [ -s "$CURL_CONFIG" ]; then
+        curl -s --config "$CURL_CONFIG" "$@" > "$output"
+    else
+        curl -s "$@" > "$output"
+    fi
+}
+
+request_failed() {
+    printf '{"error":"request_failed","message":"GitHub request failed"}\n'
+    exit 1
+}
+
+write_graphql_query() {
+    python3 - "$USERNAME" "$TMPDIR/query.json" <<'PYEOF'
+import json
+import sys
+
+username, output_path = sys.argv[1:]
+query = """query($u:String!){user(login:$u){login name avatarUrl bio publicRepos:repositories(privacy:PUBLIC){totalCount}privateRepos:repositories(privacy:PRIVATE){totalCount}followers{totalCount}following{totalCount}repositories(first:6,orderBy:{field:PUSHED_AT,direction:DESC},ownerAffiliations:OWNER){nodes{name nameWithOwner isPrivate stargazerCount forkCount description pushedAt url primaryLanguage{name color}defaultBranchRef{target{...on Commit{history(first:1){nodes{message committedDate oid}}}}}}}contributionsCollection{contributionCalendar{totalContributions colors weeks{contributionDays{contributionCount date color weekday}}}totalCommitContributions totalPullRequestContributions totalIssueContributions totalPullRequestReviewContributions totalRepositoriesWithContributedCommits commitContributionsByRepository(maxRepositories:8){repository{nameWithOwner url primaryLanguage{name color}stargazerCount}contributions{totalCount}}}}}"""
+with open(output_path, "w", encoding="utf-8") as output:
+    json.dump({"query": query, "variables": {"u": username}}, output)
+PYEOF
+}
 
 # ─────────────────────────────────────────────────────────
 # PATH A: GraphQL v4 (preferred — requires PAT)
 # One single query fetches everything we need.
 # ─────────────────────────────────────────────────────────
 if [ -n "$TOKEN" ]; then
+    write_graphql_query
 
-    # GraphQL query — all data in a single request
-    cat > "$TMPDIR/query.json" << ENDJSON
-{
-  "query": "query(\$u:String!){user(login:\$u){login name avatarUrl bio publicRepos:repositories(privacy:PUBLIC){totalCount}privateRepos:repositories(privacy:PRIVATE){totalCount}followers{totalCount}following{totalCount}repositories(first:6,orderBy:{field:PUSHED_AT,direction:DESC},ownerAffiliations:OWNER){nodes{name nameWithOwner isPrivate stargazerCount forkCount description pushedAt url primaryLanguage{name color}defaultBranchRef{target{...on Commit{history(first:1){nodes{message committedDate oid}}}}}}}contributionsCollection{contributionCalendar{totalContributions colors weeks{contributionDays{contributionCount date color weekday}}}totalCommitContributions totalPullRequestContributions totalIssueContributions totalPullRequestReviewContributions totalRepositoriesWithContributedCommits commitContributionsByRepository(maxRepositories:8){repository{nameWithOwner url primaryLanguage{name color}stargazerCount}contributions{totalCount}}}}}",
-  "variables": {"u": "$USERNAME"}
-}
-ENDJSON
-
-    # Execute single GraphQL request
-    curl -s -m 15 \
-        -H "Authorization: Bearer $TOKEN" \
+    # The authorization header stays in a mode-600 curl config file, never argv.
+    curl_request "$TMPDIR/graphql.json" \
+        -m 15 \
         -H "Content-Type: application/json" \
         -d @"$TMPDIR/query.json" \
-        "https://api.github.com/graphql" > "$TMPDIR/graphql.json" 2>/dev/null
+        "https://api.github.com/graphql" || request_failed
 
     # Events via REST (not available in GraphQL)
-    curl -s -m 10 \
-        -H "Authorization: Bearer $TOKEN" \
+    curl_request "$TMPDIR/events.json" \
+        -m 10 \
         -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/users/$USERNAME/events?per_page=15" > "$TMPDIR/events.json" 2>/dev/null
+        "https://api.github.com/users/$USERNAME/events?per_page=15" || request_failed
 
     # Notifications via REST
-    curl -s -m 10 \
-        -H "Authorization: Bearer $TOKEN" \
+    curl_request "$TMPDIR/notifications.json" \
+        -m 10 \
         -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/notifications?per_page=15" > "$TMPDIR/notifications.json" 2>/dev/null
+        "https://api.github.com/notifications?per_page=15" || request_failed
 
     # Parse and unify via Python
     TMPDIR_PATH="$TMPDIR" python3 << 'PYEOF'
@@ -245,8 +280,8 @@ PYEOF
 # PATH B: REST API v3 fallback (no token — public data only)
 # ─────────────────────────────────────────────────────────
 else
-    curl -s -m 10 -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/users/$USERNAME" > "$TMPDIR/profile.json" 2>/dev/null
+    curl_request "$TMPDIR/profile.json" -m 10 -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/users/$USERNAME" || request_failed
 
     # Check for errors early
     if grep -q '"message"' "$TMPDIR/profile.json" 2>/dev/null; then
@@ -255,11 +290,11 @@ else
         exit 0
     fi
 
-    curl -s -m 10 -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/users/$USERNAME/events/public?per_page=15" > "$TMPDIR/events.json" 2>/dev/null
+    curl_request "$TMPDIR/events.json" -m 10 -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/users/$USERNAME/events/public?per_page=15" || request_failed
 
-    curl -s -m 10 -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/users/$USERNAME/repos?sort=pushed&per_page=6&direction=desc" > "$TMPDIR/repos.json" 2>/dev/null
+    curl_request "$TMPDIR/repos.json" -m 10 -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/users/$USERNAME/repos?sort=pushed&per_page=6&direction=desc" || request_failed
 
     TMPDIR_PATH="$TMPDIR" python3 << 'PYEOF'
 import json, os

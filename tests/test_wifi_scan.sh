@@ -1,32 +1,48 @@
-#!/bin/bash
-# tests/test_wifi_scan.sh
+#!/usr/bin/env bash
+set -euo pipefail
 
-SCRIPT="./dot_config/scripts/network-manager.sh"
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/wifi-scan.XXXXXX")"
+BEFORE="$(git -C "$ROOT" status --porcelain=v1)"
+trap 'rm -rf "$TMP"' EXIT
 
-echo "Running scan test..."
-OUTPUT=$($SCRIPT scan)
+fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+expect_fail() { local expected="$1"; shift; if "$@" > "$TMP/out" 2> "$TMP/err"; then fail "expected failure: $*"; fi; [[ "$(<"$TMP/err")" == "$expected" ]] || fail "unexpected failure: $*"; }
+SCRIPT="$ROOT/dot_config/scripts/network-manager.sh"
+BIN="$TMP/bin"
+mkdir -p "$BIN"
 
-echo "Output:"
-echo "$OUTPUT"
+cat > "$BIN/nmcli" <<'EOF'
+#!/usr/bin/env bash
+case " $* " in
+    *' NAME connection show '*) printf '%s\n' 'Known Network' ;;
+    *' device wifi list '*)
+        printf '%s\n' \
+            '92:WPA2:5180:36:540 Mbit/s:yes:Known Network' \
+            '47:WPA3:2412:1:130 Mbit/s:no:Other Network'
+        ;;
+    *) printf 'unexpected nmcli invocation\n' >&2; exit 9 ;;
+esac
+EOF
+chmod +x "$BIN/nmcli"
 
-# Check if output is valid JSON array
-if ! echo "$OUTPUT" | jq -e 'if type == "array" then true else false end' > /dev/null; then
-    echo "FAILED: Output is not a JSON array"
-    exit 1
-fi
+OUTPUT="$(PATH="$BIN:/usr/bin:/bin" bash "$SCRIPT" scan)"
+jq -e '
+    type == "array"
+    and length == 2
+    and .[0] == {ssid: "Known Network", signal: 92, security: "WPA2", band: "5 GHz", chan: "36", rate: "540 Mbit/s", known: true}
+    and .[1] == {ssid: "Other Network", signal: 47, security: "WPA3", band: "2.4 GHz", chan: "1", rate: "130 Mbit/s", known: false}
+' <<<"$OUTPUT" >/dev/null || fail 'scan JSON contract changed'
 
-# Check for new fields in the first item (if array is not empty)
-if echo "$OUTPUT" | jq -e 'length > 0' > /dev/null; then
-    MISSING_FIELDS=$(echo "$OUTPUT" | jq -r '.[0] | to_entries | map(select(.key | in({"ssid":1, "signal":1, "security":1, "band":1, "chan":1, "rate":1, "known":1}) | not)) | map(.key) | join(", ")')
-    
-    REQUIRED_FIELDS=("ssid" "signal" "security" "band" "chan" "rate" "known")
-    for field in "${REQUIRED_FIELDS[@]}"; do
-        if ! echo "$OUTPUT" | jq -e ".[0] | has(\"$field\")" > /dev/null; then
-            echo "FAILED: Missing field '$field'"
-            exit 1
-        fi
-    done
-    echo "SUCCESS: All required fields present in scan output."
-else
-    echo "SKIP: No wifi networks found to test."
-fi
+cat > "$BIN/nmcli" <<'EOF'
+#!/usr/bin/env bash
+case " $* " in
+    *' NAME connection show '*) exit 0 ;;
+    *) exit 9 ;;
+esac
+EOF
+chmod +x "$BIN/nmcli"
+expect_fail 'Error: Unable to scan Wi-Fi networks.' env PATH="$BIN:/usr/bin:/bin" bash "$SCRIPT" scan
+
+[[ "$(git -C "$ROOT" status --porcelain=v1)" == "$BEFORE" ]] || fail 'test changed the worktree'
+printf 'PASS: hermetic Wi-Fi scan boundary\n'

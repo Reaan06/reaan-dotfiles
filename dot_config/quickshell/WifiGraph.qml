@@ -17,7 +17,9 @@ Item {
     property color cSurface: Qt.rgba(1, 1, 1, 0.05)
     readonly property color onAccentFg: "#11111b"
 
-    readonly property string netScript: Quickshell.env("HOME") + "/.config/scripts/network-manager.sh"
+    RuntimePaths { id: runtimePaths }
+
+    readonly property string netScript: runtimePaths.scriptsDir + "/network-manager.sh"
 
     property bool connected: false
     property string ssid: ""
@@ -37,7 +39,19 @@ Item {
     property string retrievedWifiPass: ""
     property bool showingWifiPass: false
 
-    readonly property string getPassScript: Quickshell.env("HOME") + "/.config/scripts/get-wifi-pass.sh"
+    readonly property string getPassScript: runtimePaths.scriptsDir + "/get-wifi-pass.sh"
+
+    function connectToNetwork(ssidValue, credential) {
+        connectProc.credential = credential || ""
+        connectProc.command = [root.netScript, "connect", ssidValue]
+        connectProc.running = true
+    }
+
+    function readWifiPassword() {
+        getPassProc.credential = root.sudoPassword
+        getPassProc.command = [root.getPassScript, root.ssid]
+        getPassProc.running = true
+    }
 
     function parseWifiJson(raw, label) {
         var clean = (raw || "").trim()
@@ -90,7 +104,7 @@ Item {
 
     Process {
         id: infoProc
-        command: ["sh", "-c", root.netScript + " info"]
+        command: [root.netScript, "info"]
         stdout: StdioCollector {
             onStreamFinished: applyInfo(text)
         }
@@ -98,7 +112,7 @@ Item {
 
     Process {
         id: scanProc
-        command: ["sh", "-c", root.netScript + " scan"]
+        command: [root.netScript, "scan"]
         stdout: StdioCollector {
             onStreamFinished: applyScan(text)
         }
@@ -112,14 +126,21 @@ Item {
 
     Process {
         id: connectProc
+        property string credential: ""
+        stdinEnabled: credential.length > 0
+        onRunningChanged: if (running && credential.length > 0) connectProc.write(credential + "\n")
         onExited: function() {
+            credential = ""
             infoProc.running = true
         }
     }
 
     Process {
         id: getPassProc
-        command: ["sh", "-c", root.getPassScript + " '" + root.ssid + "' '" + root.sudoPassword + "'"]
+        property string credential: ""
+        stdinEnabled: credential.length > 0
+        onRunningChanged: if (running && credential.length > 0) getPassProc.write(credential + "\n")
+        onExited: credential = ""
         stdout: StdioCollector {
             onStreamFinished: {
                 root.retrievedWifiPass = text.trim()
@@ -286,8 +307,7 @@ Item {
                                 passField.text = ""
                                 root.showingAuth = true
                             } else {
-                                connectProc.command = ["nmcli", "device", "wifi", "connect", modelData.ssid]
-                                connectProc.running = true
+                                root.connectToNetwork(modelData.ssid, "")
                             }
                         }
                     }
@@ -367,8 +387,7 @@ Item {
                         fgColor: root.cText
                         primary: true
                         onClicked: {
-                            connectProc.command = ["nmcli", "device", "wifi", "connect", root.selectedSsid, "password", root.password]
-                            connectProc.running = true
+                            root.connectToNetwork(root.selectedSsid, root.password)
                             root.showingAuth = false
                         }
                     }
@@ -402,7 +421,7 @@ Item {
                     background: Rectangle { radius: 12 * root.scale; color: root.cBg; border.color: root.accentColor }
                     onTextChanged: root.sudoPassword = text
                     onAccepted: {
-                        getPassProc.running = true
+                        root.readWifiPassword()
                         root.showingSudoAuth = false
                     }
                 }
@@ -431,7 +450,7 @@ Item {
                         fgColor: root.cText
                         primary: true
                         onClicked: {
-                            getPassProc.running = true
+                            root.readWifiPassword()
                             root.showingSudoAuth = false
                         }
                     }

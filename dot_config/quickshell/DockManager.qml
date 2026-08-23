@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "components"
 
 /**
  * DockManager.qml
@@ -26,6 +27,8 @@ FocusScope {
     property var hiddenApps: []
     property var activeApps: ({})
     property var rawUsage: ({})
+
+    RuntimePaths { id: runtimePaths }
     
     // Keyboard navigation
     property int focusedIndex: -1
@@ -60,7 +63,7 @@ FocusScope {
 
     function hideDock() {
         root.active = false;
-        mProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+        mProc.command = [runtimePaths.scriptsDir + "/dock-toggle.sh", "hide"];
         mProc.running = true;
     }
 
@@ -118,7 +121,7 @@ FocusScope {
     ListModel { id: topAppsModel }
     Process {
         id: topAppsReader
-        command: ["sh", "-c", "cat $HOME/.cache/app_usage.json 2>/dev/null || echo '{}'"]
+        command: ["cat", runtimePaths.home + "/.cache/app_usage.json"]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (text && text.trim().length > 0) {
@@ -216,7 +219,7 @@ FocusScope {
     Timer { id: hideTimer; interval: 1000; onTriggered: if (!root.launcherOpen && !root.isHovered) root.active = false }
 
     function loadPinned() {
-        var path = Quickshell.env("HOME") + "/.config/scripts/pinned_apps.json"
+        var path = runtimePaths.scriptsDir + "/pinned_apps.json"
         try {
             var content = Quickshell.readFile(path)
             if (content) root.pinnedApps = JSON.parse(content)
@@ -224,7 +227,7 @@ FocusScope {
     }
     
     function loadHidden() {
-        var path = Quickshell.env("HOME") + "/.config/scripts/hidden_apps.json"
+        var path = runtimePaths.scriptsDir + "/hidden_apps.json"
         try {
             var content = Quickshell.readFile(path)
             if (content) root.hiddenApps = JSON.parse(content)
@@ -240,7 +243,7 @@ FocusScope {
             currentPinned.splice(idx, 1);
         }
         root.pinnedApps = currentPinned; 
-        pinProcess.command = ["sh", "-c", "python3 $HOME/.config/scripts/pin_app.py " + appClass]
+        pinProcess.command = ["python3", runtimePaths.scriptsDir + "/pin_app.py", appClass]
         pinProcess.running = true
     }
     
@@ -253,7 +256,7 @@ FocusScope {
             currentHidden.splice(idx, 1);
         }
         root.hiddenApps = currentHidden;
-        hideProcess.command = ["sh", "-c", "python3 $HOME/.config/scripts/hide_app.py " + appClass]
+        hideProcess.command = ["python3", runtimePaths.scriptsDir + "/hide_app.py", appClass]
         hideProcess.running = true
     }
     
@@ -447,12 +450,12 @@ FocusScope {
 
     Process {
         id: dockBridge
-        command: ["sh", "-c", "python3 $HOME/.config/scripts/dock_bridge.py"]
+        command: ["python3", runtimePaths.scriptsDir + "/dock_bridge.py"]
     }
 
     Process {
         id: dockStateReader
-        command: ["sh", "-c", "cat /tmp/qs-dock-state.json 2>/dev/null"]
+        command: ["cat", runtimePaths.runtimeDir + "/qs-dock-state.json"]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (!text || text.trim() === "") return;
@@ -484,7 +487,7 @@ FocusScope {
     property var allApps: []
     Process {
         id: auraData
-        command: ["sh", "-c", "python3 $HOME/.config/scripts/app_launcher_data.py"]
+        command: ["python3", runtimePaths.scriptsDir + "/app_launcher_data.py"]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (!text || text.trim() === "") return;
@@ -568,7 +571,7 @@ FocusScope {
                     isFocused: root.focusedIndex === (1 + index)
                     onActionExecuted: {
                         root.active = false;
-                        mProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+                        mProc.command = [runtimePaths.scriptsDir + "/dock-toggle.sh", "hide"];
                         mProc.running = true;
                     }
                     
@@ -598,7 +601,7 @@ FocusScope {
                     isFocused: root.focusedIndex === (1 + root.topAppsCount + index)
                     onActionExecuted: {
                         root.active = false;
-                        mProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+                        mProc.command = [runtimePaths.scriptsDir + "/dock-toggle.sh", "hide"];
                         mProc.running = true;
                     }
                     
@@ -630,7 +633,7 @@ FocusScope {
                     isFocused: root.focusedIndex === (1 + root.topAppsCount + root.pinnedApps.length + index)
                     onActionExecuted: {
                         root.active = false;
-                        mProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+                        mProc.command = [runtimePaths.scriptsDir + "/dock-toggle.sh", "hide"];
                         mProc.running = true;
                     }
                     

@@ -142,7 +142,7 @@ ShellRoot {
 
     Process {
         id: paletteProc
-        command: ["sh", "-c", "cat $HOME/.config/quickshell/.palette 2>/dev/null"]
+        command: ["cat", runtimePaths.configHome + "/quickshell/.palette"]
         stdout: StdioCollector { onStreamFinished: { parsePalette(text.trim()) } }
     }
     Timer { interval: 3000; running: true; repeat: true; triggeredOnStart: true; onTriggered: paletteProc.running = true }
@@ -173,82 +173,82 @@ ShellRoot {
         } catch (e) { console.log("Error parsing palette: " + e) }
     }
 
-    Process {
-        id: amStateProc
-        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-audio-manager 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-dock-toggle 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-wallpaper-picker 2>/dev/null; echo '---'; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-ai-usage 2>/dev/null"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var parts = text.trim().split("---")
-                if (parts.length < 6) return
-                
-                var amRawFull = parts[0].trim()
-                var f2RawFull = parts[1].trim()
-                var dockRawFull = parts[2].trim()
-                var btRawFull = parts[3].trim()
-                var wpRawFull = parts[4].trim()
-                var aiRawFull = parts[5].trim()
-
-                if (amRawFull !== _lastAmState) {
-                    _lastAmState = amRawFull
-                    var amParts = amRawFull.split(" ")
-                    var amRaw = amParts[0]
-                    audioManagerMonitor = amParts.length > 1 ? amParts[1] : ""
-                    var newVal = (amRaw === "visible")
-                    if (!newVal && audioManagerVisible) { amAnimating = true; amHideTimer.start() }
-                    else if (newVal) { amAnimating = false; amHideTimer.stop() }
-                    audioManagerVisible = newVal
-                }
-                if (f2RawFull !== _lastF2State) {
-                    _lastF2State = f2RawFull
-                    var f2Parts = f2RawFull.split(" ")
-                    var f2Raw = f2Parts[0]
-                    superF2Monitor = f2Parts.length > 1 ? f2Parts[1] : ""
-                    var newValF2 = (f2Raw === "visible")
-                    if (!newValF2 && superF2Visible) { f2Animating = true; f2HideTimer.start() }
-                    else if (newValF2) { f2Animating = false; f2HideTimer.stop() }
-                    superF2Visible = newValF2
-                }
-                if (dockRawFull !== _lastDockState) {
-                    _lastDockState = dockRawFull
-                    var dockParts = dockRawFull.split(" ")
-                    var dockRaw = dockParts[0]
-                    dockMonitor = dockParts.length > 1 ? dockParts[1] : ""
-                    dockVisible = (dockRaw === "visible")
-                }
-                if (btRawFull !== _lastBtState) {
-                    _lastBtState = btRawFull
-                    var btParts = btRawFull.split(" ")
-                    var btRaw = btParts[0]
-                    btMonitor = btParts.length > 1 ? btParts[1] : ""
-                    var newValBt = (btRaw === "visible")
-                    if (!newValBt && btVisible) { btAnimating = true; btHideTimer.start() }
-                    else if (newValBt) { btAnimating = false; btHideTimer.stop() }
-                    btVisible = newValBt
-                }
-                if (wpRawFull !== _lastWallpaperState) {
-                    _lastWallpaperState = wpRawFull
-                    var wpParts = wpRawFull.split(" ")
-                    var wpRaw = wpParts[0]
-                    wallpaperMonitor = wpParts.length > 1 ? wpParts[1] : ""
-                    var newValWp = (wpRaw === "visible")
-                    if (!newValWp && wallpaperVisible) { wpAnimating = true; wpHideTimer.start() }
-                    else if (newValWp) { wpAnimating = false; wpHideTimer.stop() }
-                    wallpaperVisible = newValWp
-                }
-                if (aiRawFull !== _lastAiUsageState) {
-                    _lastAiUsageState = aiRawFull
-                    var aiParts = aiRawFull.split(" ")
-                    var aiRaw = aiParts[0]
-                    aiUsageMonitor = aiParts.length > 1 ? aiParts[1] : ""
-                    var newValAi = (aiRaw === "visible")
-                    if (!newValAi && aiUsageVisible) { aiUsageAnimating = true; aiUsageHideTimer.start() }
-                    else if (newValAi) { aiUsageAnimating = false; aiUsageHideTimer.stop(); refreshAiUsage() }
-                    aiUsageVisible = newValAi
-                }
-            }
+    function readRuntimeState(name) {
+        try {
+            return Quickshell.readFile(runtimePaths.runtimeDir + "/" + name) || ""
+        } catch (error) {
+            return ""
         }
     }
-    Timer { interval: 250; running: true; repeat: true; triggeredOnStart: true; onTriggered: amStateProc.running = true }
+
+    function refreshPanelStates() {
+        var amRawFull = readRuntimeState("qs-audio-manager").trim()
+        var f2RawFull = readRuntimeState("qs-super-f2").trim()
+        var dockRawFull = readRuntimeState("qs-dock-toggle").trim()
+        var btRawFull = readRuntimeState("qs-bt-panel").trim()
+        var wpRawFull = readRuntimeState("qs-wallpaper-picker").trim()
+        var aiRawFull = readRuntimeState("qs-ai-usage").trim()
+
+        if (aiRawFull !== _lastAiUsageState) {
+            _lastAiUsageState = aiRawFull
+            var aiParts = aiRawFull.split(" ")
+            var aiRaw = aiParts[0]
+            aiUsageMonitor = aiParts.length > 1 ? aiParts[1] : ""
+            var newValAi = (aiRaw === "visible")
+            if (!newValAi && aiUsageVisible) { aiUsageAnimating = true; aiUsageHideTimer.start() }
+            else if (newValAi) { aiUsageAnimating = false; aiUsageHideTimer.stop(); refreshAiUsage() }
+            aiUsageVisible = newValAi
+        }
+
+        if (amRawFull !== _lastAmState) {
+            _lastAmState = amRawFull
+            var amParts = amRawFull.split(" ")
+            var amRaw = amParts[0]
+            audioManagerMonitor = amParts.length > 1 ? amParts[1] : ""
+            var newVal = (amRaw === "visible")
+            if (!newVal && audioManagerVisible) { amAnimating = true; amHideTimer.start() }
+            else if (newVal) { amAnimating = false; amHideTimer.stop() }
+            audioManagerVisible = newVal
+        }
+        if (f2RawFull !== _lastF2State) {
+            _lastF2State = f2RawFull
+            var f2Parts = f2RawFull.split(" ")
+            var f2Raw = f2Parts[0]
+            superF2Monitor = f2Parts.length > 1 ? f2Parts[1] : ""
+            var newValF2 = (f2Raw === "visible")
+            if (!newValF2 && superF2Visible) { f2Animating = true; f2HideTimer.start() }
+            else if (newValF2) { f2Animating = false; f2HideTimer.stop() }
+            superF2Visible = newValF2
+        }
+        if (dockRawFull !== _lastDockState) {
+            _lastDockState = dockRawFull
+            var dockParts = dockRawFull.split(" ")
+            var dockRaw = dockParts[0]
+            dockMonitor = dockParts.length > 1 ? dockParts[1] : ""
+            dockVisible = (dockRaw === "visible")
+        }
+        if (btRawFull !== _lastBtState) {
+            _lastBtState = btRawFull
+            var btParts = btRawFull.split(" ")
+            var btRaw = btParts[0]
+            btMonitor = btParts.length > 1 ? btParts[1] : ""
+            var newValBt = (btRaw === "visible")
+            if (!newValBt && btVisible) { btAnimating = true; btHideTimer.start() }
+            else if (newValBt) { btAnimating = false; btHideTimer.stop() }
+            btVisible = newValBt
+        }
+        if (wpRawFull !== _lastWallpaperState) {
+            _lastWallpaperState = wpRawFull
+            var wpParts = wpRawFull.split(" ")
+            var wpRaw = wpParts[0]
+            wallpaperMonitor = wpParts.length > 1 ? wpParts[1] : ""
+            var newValWp = (wpRaw === "visible")
+            if (!newValWp && wallpaperVisible) { wpAnimating = true; wpHideTimer.start() }
+            else if (newValWp) { wpAnimating = false; wpHideTimer.stop() }
+            wallpaperVisible = newValWp
+        }
+    }
+    Timer { interval: 250; running: true; repeat: true; triggeredOnStart: true; onTriggered: refreshPanelStates() }
 
     Timer { id: amHideTimer; interval: 400; onTriggered: amAnimating = false }
     Timer { id: f2HideTimer; interval: 400; onTriggered: f2Animating = false }
@@ -258,7 +258,7 @@ ShellRoot {
     // ── Global: start MPRIS follow daemon (once, not per-monitor) ──
     Process {
         id: mprisStart
-        command: ["sh", "-c", "~/.config/scripts/mpris-follow.sh &"]
+        command: [runtimePaths.scriptsDir + "/mpris-follow.sh"]
     }
     Component.onCompleted: mprisStart.running = true
 
@@ -309,12 +309,12 @@ ShellRoot {
                 period: shellRoot.aiUsagePeriod
                 status: shellRoot.aiUsageStatus
                 errorCode: shellRoot.aiUsageError
-                loading: shellRoot.aiUsageLoading
-                sourceAgeSeconds: shellRoot.aiUsageSourceAge
-                snapshot: shellRoot.lastKnownGood
-                providers: shellRoot.aiUsageProviders
-                lastKnownGoodProviders: shellRoot.lastKnownGoodProviders
-                anchorWidth: aiUsageWin.anchorWidth
+                 loading: shellRoot.aiUsageLoading
+                 sourceAgeSeconds: shellRoot.aiUsageSourceAge
+                 snapshot: shellRoot.lastKnownGood
+                 providers: shellRoot.aiUsageProviders
+                 lastKnownGoodProviders: shellRoot.lastKnownGoodProviders
+                 anchorWidth: aiUsageWin.anchorWidth
                 neckOffset: aiUsageWin.worldAnchorX - (aiUsageWin.x + aiUsageWin.width / 2)
                 onRefreshRequested: shellRoot.refreshAiUsage()
                 onPeriodSelected: shellRoot.setAiUsagePeriod(selectedPeriod)
@@ -520,4 +520,3 @@ ShellRoot {
         }
     }
 }
-

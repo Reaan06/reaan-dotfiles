@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
+import "components"
 
 /**
  * AuraLauncher.qml
@@ -17,6 +18,8 @@ FocusScope {
     property var usageData: ({})
     property var hiddenApps: []
     property string filter: ""
+
+    RuntimePaths { id: runtimePaths }
     
     focus: root.active
 
@@ -146,21 +149,11 @@ FocusScope {
             focusProcess.running = true;
         } else {
             var execStr = model.exec ? model.exec : appClass;
-            var cleanCmd = execStr.replace(/'/g, "'\\''");
-            var binCmd = cleanCmd.split(" ")[0];
-            var fallbackCmd = "grep -rilm1 '" + cleanCmd + "' /usr/share/applications/ ~/.local/share/applications/ 2>/dev/null | head -1 | xargs grep -oP 'Exec=\\\\K[^%]*' | head -1 | xargs";
-            var cmd = "if command -v '" + binCmd + "' >/dev/null 2>&1; then " +
-                      "/usr/bin/hyprctl dispatch exec '" + cleanCmd + "'; " +
-                      "else " +
-                      "fb=$(" + fallbackCmd + "); " +
-                      "if [ -n \"$fb\" ]; then /usr/bin/hyprctl dispatch exec \"$fb\"; " +
-                      "else /usr/bin/hyprctl dispatch exec '" + cleanCmd + "'; fi; " +
-                      "fi";
-            execApp.command = ["sh", "-c", cmd];
+            execApp.command = ["python3", runtimePaths.scriptsDir + "/app-launch.py", execStr];
             execApp.running = true;
         }
         root.active = false;
-        hidePanelProc.command = ["sh", "-c", "~/.config/scripts/dock-toggle.sh hide"];
+        hidePanelProc.command = [runtimePaths.scriptsDir + "/dock-toggle.sh", "hide"];
         hidePanelProc.running = true;
     }
 
@@ -173,7 +166,7 @@ FocusScope {
             currentPinned.splice(idx, 1);
         }
         root.pinnedApps = currentPinned;
-        pinProcess.command = ["sh", "-c", "python3 $HOME/.config/scripts/pin_app.py " + appClass];
+        pinProcess.command = ["python3", runtimePaths.scriptsDir + "/pin_app.py", appClass];
         pinProcess.running = true;
     }
     

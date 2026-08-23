@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "components"
 
 // GitHubLinkingView: Connection screen utilizing GitHub CLI (gh)
 // Spawns a terminal to authenticate via web and then fetches the data.
@@ -25,10 +26,11 @@ Item {
     property bool showError: root.ghManager.errorMessage !== ""
     property bool isLoggingIn: false
 
+    RuntimePaths { id: runtimePaths }
+
     Process {
         id: loginProc
-        // This launches Kitty terminal to run gh auth login via web, extracts token/user and saves it.
-        command: ["kitty", "--title", "GitHub Login", "-e", "bash", "-c", "echo 'Iniciando autenticación con GitHub...'; sleep 1; gh auth login -w -p https; echo 'Obteniendo usuario devuelto...'; token=$(gh auth token); user=$(gh api user -q .login); printf '%b\\n' \"$user\\n$token\" > ~/.config/quickshell/.github-config; chmod 600 ~/.config/quickshell/.github-config; echo '¡Autenticación completada! Puedes cerrar esta ventana.'; sleep 2"]
+        command: ["kitty", "--title", "GitHub Login", "-e", "python3", runtimePaths.scriptsDir + "/github-config.py", "login"]
         onExited: {
             root.isLoggingIn = false
             root.ghManager.loadSavedConfig() // Recarga config una vez terminamos de hacer login

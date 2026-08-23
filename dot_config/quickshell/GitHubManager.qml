@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "components"
 
 // GitHubManager: Singleton-like component that manages GitHub data.
 // Uses Process to run github-fetch.sh and exposes parsed data as properties.
@@ -15,8 +16,10 @@ QtObject {
     property bool loading: false
     property string errorMessage: ""
 
-    // ── Persistence file (stored alongside quickshell config) ──
-    readonly property string configPath: "$HOME/.config/quickshell/.github-config"
+    property var runtimePaths: RuntimePaths {}
+
+    readonly property string fetchScript: runtimePaths.scriptsDir + "/github-fetch.sh"
+    readonly property string configScript: runtimePaths.scriptsDir + "/github-config.py"
 
     // ── Parsed data ──
     property var profile: ({
@@ -31,7 +34,11 @@ QtObject {
 
     // ── Internal process ──
     property var _fetchProc: Process {
-        command: ["sh", "-c", ""]
+        id: fetchProc
+        property string credential: ""
+        stdinEnabled: credential.length > 0
+        onRunningChanged: if (running && credential.length > 0) fetchProc.write(credential + "\n")
+        onExited: credential = ""
         stdout: StdioCollector {
             onStreamFinished: {
                 ghManager.loading = false
@@ -72,19 +79,23 @@ QtObject {
 
     // ── Persistence: save config ──
     property var _saveProc: Process {
-        command: ["sh", "-c", ""]
+        id: saveProc
+        property string credential: ""
+        stdinEnabled: credential.length > 0
+        onRunningChanged: if (running && credential.length > 0) saveProc.write(credential + "\n")
+        onExited: credential = ""
     }
 
     // ── Persistence: load config ──
     property var _loadProc: Process {
-        command: ["sh", "-c", "cat " + ghManager.configPath + " 2>/dev/null"]
+        command: ["python3", ghManager.configScript, "load"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    var lines = text.trim().split("\n")
-                    if (lines.length >= 1 && lines[0].length > 0) {
-                        ghManager.username = lines[0]
-                        if (lines.length >= 2) ghManager.token = lines[1]
+                    var saved = JSON.parse((text || "").trim() || "{}")
+                    if (saved.username) {
+                        ghManager.username = saved.username
+                        ghManager.token = saved.token || ""
                         ghManager.refresh()
                     }
                 } catch(e) {}
@@ -103,12 +114,8 @@ QtObject {
             return
         }
 
-        // Save config — use printf for safe escaping
-        var content = username
-        if (token) content += "\\n" + token
-        _saveProc.command = ["sh", "-c",
-            "printf '%b\\n' '" + content + "' > " + configPath + " && chmod 600 " + configPath
-        ]
+        _saveProc.credential = token
+        _saveProc.command = ["python3", configScript, "save", username]
         _saveProc.running = true
 
         refresh()
@@ -124,7 +131,8 @@ QtObject {
         contributions = null
         hasToken = false
         errorMessage = ""
-        _saveProc.command = ["sh", "-c", "rm -f " + configPath]
+        _saveProc.credential = ""
+        _saveProc.command = ["python3", configScript, "delete"]
         _saveProc.running = true
     }
 
@@ -133,10 +141,8 @@ QtObject {
         loading = true
         errorMessage = ""
 
-        var tokenArg = token ? (" " + token) : ""
-        _fetchProc.command = ["sh", "-c",
-            "$HOME/.config/scripts/github-fetch.sh " + username + tokenArg
-        ]
+        _fetchProc.credential = token
+        _fetchProc.command = ["bash", fetchScript, username]
         _fetchProc.running = true
     }
 

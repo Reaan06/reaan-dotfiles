@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "components"
 
 /**
  * DockItem.qml
@@ -17,6 +18,8 @@ Rectangle {
     property bool isPinned: false
     property color accentColor: "#89b4fa"
     property bool isFocused: false
+
+    RuntimePaths { id: runtimePaths }
     
     signal pinToggled()
     signal actionExecuted()
@@ -25,17 +28,7 @@ Rectangle {
         root.scale = 0.9
         clickAnimation.start()
         
-        var cleanCmd = root.execCmd.replace(/'/g, "'\\''");
-        var binCmd = cleanCmd.split(" ")[0];
-        var fallbackCmd = "grep -rilm1 '" + cleanCmd + "' /usr/share/applications/ ~/.local/share/applications/ 2>/dev/null | head -1 | xargs grep -oP 'Exec=\\\\K[^%]*' | head -1 | xargs";
-        var cmd = "if command -v '" + binCmd + "' >/dev/null 2>&1; then " +
-                  "/usr/bin/hyprctl dispatch exec '" + cleanCmd + "'; " +
-                  "else " +
-                  "fb=$(" + fallbackCmd + "); " +
-                  "if [ -n \"$fb\" ]; then /usr/bin/hyprctl dispatch exec \"$fb\"; " +
-                  "else /usr/bin/hyprctl dispatch exec '" + cleanCmd + "'; fi; " +
-                  "fi";
-        execLaunch.command = ["sh", "-c", cmd]
+        execLaunch.command = ["python3", runtimePaths.scriptsDir + "/app-launch.py", root.execCmd]
         execLaunch.running = true
     }
 
