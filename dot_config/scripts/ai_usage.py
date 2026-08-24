@@ -210,6 +210,19 @@ def _credential_path(environment_name, default_name, filename):
     return Path(configured) / filename if configured else home_directory() / default_name / filename
 
 
+def _openai_credential_path():
+    configured = os.environ.get("OPENAI_HOME")
+    if configured:
+        return Path(configured) / "auth.json"
+
+    preferred = home_directory() / ".openai" / "auth.json"
+    if preferred.is_file():
+        return preferred
+
+    # Compatibility fallback for the legacy ~/.codex/auth.json location.
+    return home_directory() / ".codex" / "auth.json"
+
+
 def _cli_status(command):
     return "available" if shutil.which(command) else "unavailable"
 
@@ -297,28 +310,28 @@ def _quota_window(label, value, now):
     }
 
 
-def codex_usage(now):
-    path = _credential_path("CODEX_HOME", ".codex", "auth.json")
+def openai_usage(now):
+    path = _openai_credential_path()
     if not path.is_file():
-        return provider_card("chatgpt", "ChatGPT/Codex", "missing", now, "credentials-missing",
-                             windows=[], cli_status=_cli_status("codex"))
+        return provider_card("chatgpt", "ChatGPT / OpenAI", "missing", now, "credentials-missing",
+                             windows=[])
     credentials = _read_json(path)
     tokens = credentials.get("tokens") if credentials else None
     token = tokens.get("access_token") if isinstance(tokens, dict) else None
     if not isinstance(token, str) or not token:
-        return provider_card("chatgpt", "ChatGPT/Codex", "auth", now, "access-token-missing",
-                             windows=[], cli_status=_cli_status("codex"))
+        return provider_card("chatgpt", "ChatGPT / OpenAI", "auth", now, "access-token-missing",
+                             windows=[])
     if _jwt_expired(token, now):
-        return provider_card("chatgpt", "ChatGPT/Codex", "expired", now, "access-token-expired",
-                             windows=[], cli_status=_cli_status("codex"))
+        return provider_card("chatgpt", "ChatGPT / OpenAI", "expired", now, "access-token-expired",
+                             windows=[])
 
-    headers = {"Accept": "application/json", "User-Agent": "codex-cli"}
+    headers = {"Accept": "application/json", "User-Agent": "openai-usage/1.0"}
     if isinstance(tokens, dict) and isinstance(tokens.get("account_id"), str) and tokens["account_id"]:
         headers["chatgpt-account-id"] = tokens["account_id"]
     status, response = _request_json("https://chatgpt.com/backend-api/wham/usage", token, headers)
     if status != "ok":
-        return provider_card("chatgpt", "ChatGPT/Codex", status, now, "usage-" + status,
-                             windows=[], cli_status=_cli_status("codex"))
+        return provider_card("chatgpt", "ChatGPT / OpenAI", status, now, "usage-" + status,
+                             windows=[])
     try:
         rate_limit = response.get("rate_limit")
         primary = rate_limit.get("primary_window") if isinstance(rate_limit, dict) else None
@@ -326,11 +339,10 @@ def codex_usage(now):
         secondary = rate_limit.get("secondary_window")
         if isinstance(secondary, dict):
             windows.append(_quota_window("secondary", secondary, now))
-        return provider_card("chatgpt", "ChatGPT/Codex", "ok", now, windows=windows,
-                             cli_status=_cli_status("codex"))
+        return provider_card("chatgpt", "ChatGPT / OpenAI", "ok", now, windows=windows)
     except (AttributeError, InvalidCounter, TypeError):
-        return provider_card("chatgpt", "ChatGPT/Codex", "malformed", now, "usage-response-malformed",
-                             windows=[], cli_status=_cli_status("codex"))
+        return provider_card("chatgpt", "ChatGPT / OpenAI", "malformed", now, "usage-response-malformed",
+                             windows=[])
 
 
 def claude_usage(now):
@@ -403,7 +415,7 @@ def main(argv=None):
     result = dict(opencode)
     result.update({
         "version": 1,
-        "providers": [codex_usage(now), claude_usage(now), opencode_card],
+        "providers": [openai_usage(now), claude_usage(now), opencode_card],
     })
     print(json.dumps(result, separators=(",", ":"), allow_nan=False))
     return 0

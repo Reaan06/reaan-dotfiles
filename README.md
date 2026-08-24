@@ -37,5 +37,8 @@ Este repositorio contiene la configuración del sistema personal (*dotfiles*) pa
 - [[conductor/index.md]] - Gestión de planes y proyectos.
 - [[eq-service/README.md]] - Documentación del servicio de audio.
 
+## Credenciales de AI Usage
+El colector ChatGPT / OpenAI prefiere `OPENAI_HOME/auth.json`, luego `~/.openai/auth.json`. Si ninguna de esas credenciales existe, conserva compatibilidad usando `~/.codex/auth.json` como fallback de migración heredado.
+
 ---
 _Nota: Este archivo sirve como MOC (Map of Content) principal para el proyecto._

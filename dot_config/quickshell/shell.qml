@@ -12,8 +12,11 @@ ShellRoot {
     RuntimePaths { id: runtimePaths }
 
     // ── Global Anchor Registry ──
-    // Almacena las coordenadas locales de los módulos (respecto a la barra) por monitor.
+    // Stores monitor-local screen coordinates for top-bar anchors, by monitor.
     property var anchors: ({})
+    property real topBarTopMargin: 6
+    property real topBarLeftMargin: 16
+    property real topBarHeight: 44
 
     // ── Global state for AudioManager, Super F2 & Bluetooth ──
     property bool audioManagerVisible: false
@@ -28,15 +31,28 @@ ShellRoot {
     property string wallpaperMonitor: ""
     property bool aiUsageVisible: false
     property bool aiUsageAnimating: false
+    property real aiUsageUnfoldProgress: aiUsageVisible ? 1 : 0
     property string aiUsageMonitor: ""
     property string aiUsagePeriod: "day"
     property string aiUsageStatus: "missing"
     property string aiUsageError: "source-missing"
     property int aiUsageSourceAge: -1
     property bool aiUsageLoading: false
+    property bool aiUsageRefreshQueued: false
+    property string aiUsageRequestPeriod: "day"
+    property bool aiUsageResponseHandled: false
+    property string aiUsageResponseStatus: ""
+    property string aiUsageLastCompletedAt: ""
+    property string aiUsageLastCompletedPeriod: ""
+    property string aiUsageLastCompletedStatus: "never"
+    property string aiUsageLastGoodPeriod: ""
     property var lastKnownGood: null
     property var aiUsageProviders: []
     property var lastKnownGoodProviders: ({})
+    property bool aiProviderAuthBusy: false
+    property string aiProviderAuthProvider: ""
+    property string aiProviderAuthAction: ""
+    property string aiProviderAuthStatus: ""
     readonly property var aiUsageStatuses: ["ok", "missing", "stale", "locked", "malformed", "schema-error"]
     property bool amAnimating: false
     property bool f2Animating: false
@@ -56,16 +72,116 @@ ShellRoot {
         aiUsageToggleProcess.running = true
     }
 
-    function refreshAiUsage() {
-        if (aiUsageProcess.running) return
+    function startAiUsageRefresh() {
+        aiUsageRequestPeriod = aiUsagePeriod
+        aiUsageResponseHandled = false
+        aiUsageResponseStatus = ""
         aiUsageLoading = true
         aiUsageProcess.running = true
     }
 
+    function refreshAiUsage() {
+        if (aiUsageProcess.running) {
+            aiUsageRefreshQueued = true
+            aiUsageLoading = true
+            return
+        }
+        startAiUsageRefresh()
+    }
+
+    function clearAiUsageCache() {
+        aiUsageProviders = []
+        lastKnownGood = null
+        lastKnownGoodProviders = ({})
+        aiUsageLastGoodPeriod = ""
+        aiUsageStatus = "missing"
+        aiUsageError = "refreshing"
+        aiUsageSourceAge = -1
+    }
+
     function setAiUsagePeriod(period) {
         if (period !== "day" && period !== "week" && period !== "month") return
+        var changed = aiUsagePeriod !== period
         aiUsagePeriod = period
+        if (changed) clearAiUsageCache()
         refreshAiUsage()
+    }
+
+    function handleAiUsageOutput(raw, requestedPeriod) {
+        var requestPeriod = requestedPeriod || aiUsageRequestPeriod
+        var data = null
+        try { data = JSON.parse(raw) } catch (error) { data = null }
+        var status = data && aiUsageStatuses.indexOf(data.status) >= 0 ? data.status : "malformed"
+        if (status === "ok" && (!data.period || data.period !== requestPeriod)) {
+            aiUsageResponseHandled = true
+            aiUsageResponseStatus = "discarded"
+            aiUsageRefreshQueued = true
+            return
+        }
+        aiUsageResponseHandled = true
+        aiUsageResponseStatus = status
+
+        // Never let a response for an earlier selection become visible.
+        if (requestPeriod !== aiUsagePeriod) {
+            aiUsageRefreshQueued = true
+            return
+        }
+
+        if (status === "ok" && !validAiUsageTotals(data.totals)) status = "malformed"
+        aiUsageResponseStatus = status
+
+        aiUsageStatus = status
+        aiUsageError = data && data.error ? data.error : (status === "ok" ? "" : status)
+        aiUsageSourceAge = data && typeof data.source_age_seconds === "number"
+            ? data.source_age_seconds : -1
+        aiUsageProviders = data && Array.isArray(data.providers) ? data.providers : []
+        var retainedProviders = {}
+        for (var providerId in lastKnownGoodProviders) retainedProviders[providerId] = lastKnownGoodProviders[providerId]
+        for (var i = 0; i < aiUsageProviders.length; i++) {
+            var provider = aiUsageProviders[i]
+            if (provider && provider.status === "ok" && provider.id) {
+                retainedProviders[provider.id] = provider
+                aiUsageLastGoodPeriod = requestPeriod
+            }
+        }
+        lastKnownGoodProviders = retainedProviders
+        if (status === "ok") {
+            lastKnownGood = data
+            aiUsageLastGoodPeriod = requestPeriod
+        }
+    }
+
+    function finishAiUsageRefresh(exitCode) {
+        var completedPeriod = aiUsageRequestPeriod
+        if (!aiUsageResponseHandled) handleAiUsageOutput("", completedPeriod)
+        aiUsageLastCompletedAt = new Date().toISOString()
+        aiUsageLastCompletedPeriod = completedPeriod
+        aiUsageLastCompletedStatus = completedPeriod === aiUsagePeriod
+            ? aiUsageResponseStatus : "discarded"
+
+        if (aiUsageRefreshQueued) {
+            aiUsageRefreshQueued = false
+            startAiUsageRefresh()
+        } else {
+            aiUsageLoading = false
+        }
+    }
+
+    function invokeAiProviderAuth(provider, action) {
+        if (aiProviderAuthProcess.running) return
+        if ((provider !== "openai" && provider !== "chatgpt" && provider !== "claude")
+                || (action !== "login" && action !== "logout")) return
+        aiProviderAuthProvider = provider
+        aiProviderAuthAction = action
+        aiProviderAuthStatus = action === "login" ? "Opening..." : "Logging out..."
+        aiProviderAuthBusy = true
+        aiProviderAuthProcess.running = true
+    }
+
+    function handleAiProviderAuthOutput(raw) {
+        var message = (raw || "").trim()
+        if (message.length > 96) message = message.substr(0, 96)
+        if (message.length > 0) aiProviderAuthStatus = message
     }
 
     function validAiUsageTotals(totals) {
@@ -77,44 +193,39 @@ ShellRoot {
         return true
     }
 
-    function handleAiUsageOutput(raw) {
-        var data = null
-        try { data = JSON.parse(raw) } catch (error) { data = null }
-        var status = data && aiUsageStatuses.indexOf(data.status) >= 0 ? data.status : "malformed"
-        if (status === "ok" && !validAiUsageTotals(data.totals)) status = "malformed"
-
-        aiUsageStatus = status
-        aiUsageError = data && data.error ? data.error : (status === "ok" ? "" : status)
-        aiUsageSourceAge = data && typeof data.source_age_seconds === "number"
-            ? data.source_age_seconds : -1
-        aiUsageProviders = data && Array.isArray(data.providers) ? data.providers : []
-        var retainedProviders = {}
-        for (var providerId in lastKnownGoodProviders) retainedProviders[providerId] = lastKnownGoodProviders[providerId]
-        for (var i = 0; i < aiUsageProviders.length; i++) {
-            var provider = aiUsageProviders[i]
-            if (provider && provider.status === "ok" && provider.id) retainedProviders[provider.id] = provider
-        }
-        lastKnownGoodProviders = retainedProviders
-        if (status === "ok") lastKnownGood = data
-        aiUsageLoading = false
-    }
-
     Process {
         id: aiUsageProcess
-        command: ["python3", runtimePaths.scriptsDir + "/ai_usage.py", "--period", aiUsagePeriod]
+        command: ["python3", runtimePaths.scriptsDir + "/ai_usage.py", "--period", aiUsageRequestPeriod]
         stdout: StdioCollector {
-            onStreamFinished: shellRoot.handleAiUsageOutput(text.trim())
+            onStreamFinished: shellRoot.handleAiUsageOutput(text.trim(), shellRoot.aiUsageRequestPeriod)
         }
         onExited: function(exitCode) {
-            if (exitCode !== 0 && aiUsageLoading) {
-                shellRoot.handleAiUsageOutput("")
-            }
+            shellRoot.finishAiUsageRefresh(exitCode)
         }
     }
 
     Process {
         id: aiUsageToggleProcess
         command: [runtimePaths.scriptsDir + "/ai-usage-toggle.sh", "toggle", shellRoot.aiUsageToggleMonitor]
+    }
+
+    Process {
+        id: aiProviderAuthProcess
+        command: [runtimePaths.scriptsDir + "/ai-provider-auth.sh",
+            shellRoot.aiProviderAuthProvider === "chatgpt" ? "openai" : shellRoot.aiProviderAuthProvider,
+            shellRoot.aiProviderAuthAction]
+        stdout: StdioCollector {
+            onStreamFinished: shellRoot.handleAiProviderAuthOutput(text)
+        }
+        onExited: function(exitCode) {
+            var provider = shellRoot.aiProviderAuthProvider === "claude" ? "Claude" : "OpenAI"
+            var action = shellRoot.aiProviderAuthAction
+            shellRoot.aiProviderAuthBusy = false
+            shellRoot.aiProviderAuthStatus = exitCode === 0
+                ? provider + (action === "login" ? " login started" : " logged out")
+                : provider + " " + action + " failed"
+            shellRoot.refreshAiUsage()
+        }
     }
 
     Timer {
@@ -124,6 +235,9 @@ ShellRoot {
         repeat: true
         triggeredOnStart: true
         onTriggered: refreshAiUsage()
+    }
+    Behavior on aiUsageUnfoldProgress {
+        NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
     }
     Timer { id: aiUsageHideTimer; interval: 400; onTriggered: aiUsageAnimating = false }
 
@@ -173,21 +287,64 @@ ShellRoot {
         } catch (e) { console.log("Error parsing palette: " + e) }
     }
 
-    function readRuntimeState(name) {
+    FileView {
+        id: audioStateFile
+        path: runtimePaths.runtimeDir + "/qs-audio-manager"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+    }
+    FileView {
+        id: superF2StateFile
+        path: runtimePaths.runtimeDir + "/qs-super-f2"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+    }
+    FileView {
+        id: dockStateFile
+        path: runtimePaths.runtimeDir + "/qs-dock-toggle"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+    }
+    FileView {
+        id: btStateFile
+        path: runtimePaths.runtimeDir + "/qs-bt-panel"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+    }
+    FileView {
+        id: wallpaperStateFile
+        path: runtimePaths.runtimeDir + "/qs-wallpaper-picker"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+    }
+    FileView {
+        id: aiUsageStateFile
+        path: runtimePaths.runtimeDir + "/qs-ai-usage"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+    }
+
+    function readRuntimeState(fileView) {
         try {
-            return Quickshell.readFile(runtimePaths.runtimeDir + "/" + name) || ""
+            return fileView.text() || ""
         } catch (error) {
             return ""
         }
     }
 
     function refreshPanelStates() {
-        var amRawFull = readRuntimeState("qs-audio-manager").trim()
-        var f2RawFull = readRuntimeState("qs-super-f2").trim()
-        var dockRawFull = readRuntimeState("qs-dock-toggle").trim()
-        var btRawFull = readRuntimeState("qs-bt-panel").trim()
-        var wpRawFull = readRuntimeState("qs-wallpaper-picker").trim()
-        var aiRawFull = readRuntimeState("qs-ai-usage").trim()
+        var amRawFull = readRuntimeState(audioStateFile).trim()
+        var f2RawFull = readRuntimeState(superF2StateFile).trim()
+        var dockRawFull = readRuntimeState(dockStateFile).trim()
+        var btRawFull = readRuntimeState(btStateFile).trim()
+        var wpRawFull = readRuntimeState(wallpaperStateFile).trim()
+        var aiRawFull = readRuntimeState(aiUsageStateFile).trim()
 
         if (aiRawFull !== _lastAiUsageState) {
             _lastAiUsageState = aiRawFull
@@ -260,7 +417,9 @@ ShellRoot {
         id: mprisStart
         command: [runtimePaths.scriptsDir + "/mpris-follow.sh"]
     }
-    Component.onCompleted: mprisStart.running = true
+    Component.onCompleted: {
+        mprisStart.running = true
+    }
 
     // ── Top bar (one per monitor) ──
     Variants {
@@ -268,13 +427,18 @@ ShellRoot {
         PanelWindow {
             id: bar
             property var modelData
+            property string monitorName: modelData.name
             screen: modelData
             anchors { top: true; left: true; right: true }
-            margins { top: 6; left: 16; right: 16 }
+            margins { top: shellRoot.topBarTopMargin; left: shellRoot.topBarLeftMargin; right: 16 }
             exclusionMode: ExclusionMode.Auto
-            implicitHeight: 44
+            implicitHeight: shellRoot.topBarHeight
             color: "transparent"
-            StatusBar { anchors.fill: parent }
+            StatusBar {
+                anchors.fill: parent
+                barLeftMargin: shellRoot.topBarLeftMargin
+                monitorName: bar.monitorName
+            }
         }
     }
 
@@ -284,19 +448,25 @@ ShellRoot {
         PanelWindow {
             id: aiUsageWin
             property var modelData
+            property string monitorName: modelData.name
             screen: modelData
-            visible: (aiUsageVisible || aiUsageAnimating) && screen.name === aiUsageMonitor
+            visible: (aiUsageVisible || aiUsageAnimating) && monitorAnchorReady
+                && monitorName === aiUsageMonitor && monitorName.length > 0
             anchors.top: true; anchors.left: true
             WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
-            property real worldAnchorX: 16 + (shellRoot.anchors[screen.index]
-                ? shellRoot.anchors[screen.index].aiUsage : 0)
-            property real anchorWidth: shellRoot.anchors[screen.index]
-                ? shellRoot.anchors[screen.index].aiUsageWidth : 120
+            // StatusBar publishes a monitor-local screen X including the bar inset.
+            // Do not add the top bar margin again here.
+            property var monitorAnchor: shellRoot.anchors[monitorName]
+            property bool monitorAnchorReady: !!monitorAnchor
+            property real screenAnchorX: monitorAnchorReady
+                ? monitorAnchor.aiUsageScreenX
+                : 0
+            property real anchorWidth: monitorAnchorReady ? monitorAnchor.aiUsageWidth : 120
 
             margins {
-                top: 48
-                left: Math.max(16, Math.min(screen.width - width - 16, worldAnchorX - (width / 2)))
+                top: shellRoot.topBarTopMargin + shellRoot.topBarHeight
+                left: Math.max(16, Math.min(screen.width - width - 16, screenAnchorX - (width / 2)))
             }
             Behavior on margins.left { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
@@ -304,21 +474,31 @@ ShellRoot {
             implicitHeight: Math.max(520, screen.height * 0.58)
             exclusionMode: ExclusionMode.Ignore; color: "transparent"
 
-            AiUsageView {
-                anchors.fill: parent
+             AiUsageView {
+                 id: aiUsageContent
+                 anchors.fill: parent
                 period: shellRoot.aiUsagePeriod
                 status: shellRoot.aiUsageStatus
                 errorCode: shellRoot.aiUsageError
                  loading: shellRoot.aiUsageLoading
-                 sourceAgeSeconds: shellRoot.aiUsageSourceAge
-                 snapshot: shellRoot.lastKnownGood
+                 refreshQueued: shellRoot.aiUsageRefreshQueued
                  providers: shellRoot.aiUsageProviders
                  lastKnownGoodProviders: shellRoot.lastKnownGoodProviders
-                 anchorWidth: aiUsageWin.anchorWidth
-                neckOffset: aiUsageWin.worldAnchorX - (aiUsageWin.x + aiUsageWin.width / 2)
-                onRefreshRequested: shellRoot.refreshAiUsage()
-                onPeriodSelected: shellRoot.setAiUsagePeriod(selectedPeriod)
-            }
+                 lastGoodPeriod: shellRoot.aiUsageLastGoodPeriod
+                 lastCompletedAt: shellRoot.aiUsageLastCompletedAt
+                 lastCompletedPeriod: shellRoot.aiUsageLastCompletedPeriod
+                 lastCompletedStatus: shellRoot.aiUsageLastCompletedStatus
+                  authBusy: shellRoot.aiProviderAuthBusy
+                  authProvider: shellRoot.aiProviderAuthProvider
+                  authAction: shellRoot.aiProviderAuthAction
+                  authStatus: shellRoot.aiProviderAuthStatus
+                    anchorWidth: aiUsageWin.anchorWidth
+                  unfoldProgress: shellRoot.aiUsageUnfoldProgress
+                  neckOffset: aiUsageWin.screenAnchorX - (aiUsageWin.x + aiUsageWin.width / 2)
+                  onRefreshRequested: shellRoot.refreshAiUsage()
+                  onPeriodSelected: shellRoot.setAiUsagePeriod(selectedPeriod)
+                  onProviderAuthRequested: shellRoot.invokeAiProviderAuth(providerId, action)
+             }
         }
     }
 
@@ -328,6 +508,7 @@ ShellRoot {
         PanelWindow {
             id: osdWin
             property var modelData
+            property string monitorName: modelData.name
             screen: modelData
             visible: osdContent.osdVisible
             anchors.right: true
@@ -344,13 +525,15 @@ ShellRoot {
         PanelWindow {
             id: audioManagerWin
             property var modelData
+            property string monitorName: modelData.name
             screen: modelData
-            visible: (audioManagerVisible || amAnimating) && screen.name === audioManagerMonitor
+            visible: (audioManagerVisible || amAnimating) && monitorName === audioManagerMonitor
             anchors.top: true; anchors.left: true
             
             // Coordenada X global del ancla (16px de margen de la barra + posición local del módulo)
-            property real worldAnchorX: 16 + (shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].mpris : 0)
-            property real anchorWidth: shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].mprisWidth : 200
+            property var monitorAnchor: shellRoot.anchors[monitorName]
+            property real worldAnchorX: 16 + (monitorAnchor ? monitorAnchor.mpris : 0)
+            property real anchorWidth: monitorAnchor ? monitorAnchor.mprisWidth : 200
             
             onWorldAnchorXChanged: console.log("AUDIO: worldAnchorX=" + worldAnchorX + " width=" + width + " screenWidth=" + modelData.width)
 
@@ -383,13 +566,15 @@ ShellRoot {
         PanelWindow {
             id: superF2Win
             property var modelData
+            property string monitorName: modelData.name
             screen: modelData
-            visible: (superF2Visible || f2Animating) && screen.name === superF2Monitor
+            visible: (superF2Visible || f2Animating) && monitorName === superF2Monitor
             anchors.top: true; anchors.left: true
             
             // Coordenada X global del reloj
-            property real worldClockX: 16 + (shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].clock : 0)
-            property real clockWidth: shellRoot.anchors[screen.index] ? shellRoot.anchors[screen.index].clockWidth : 350
+            property var monitorAnchor: shellRoot.anchors[monitorName]
+            property real worldClockX: 16 + (monitorAnchor ? monitorAnchor.clock : 0)
+            property real clockWidth: monitorAnchor ? monitorAnchor.clockWidth : 350
 
             margins {
                 top: 48
@@ -418,8 +603,9 @@ ShellRoot {
         PanelWindow {
             id: btWin
             property var modelData
+            property string monitorName: modelData.name
             screen: modelData
-            visible: (btVisible || btAnimating) && screen.name === btMonitor
+            visible: (btVisible || btAnimating) && monitorName === btMonitor
             
             // Allow keyboard focus for text input (WiFi passwords)
             WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
@@ -452,8 +638,9 @@ ShellRoot {
         PanelWindow {
             id: wallpaperWin
             property var modelData
+            property string monitorName: modelData.name
             screen: modelData
-            visible: (wallpaperVisible || wpAnimating) && screen.name === wallpaperMonitor
+            visible: (wallpaperVisible || wpAnimating) && monitorName === wallpaperMonitor
             
             WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
@@ -482,6 +669,7 @@ ShellRoot {
         PanelWindow {
             id: dockWin
             property var modelData
+            property string monitorName: modelData.name
             screen: modelData
             
             anchors.bottom: true
@@ -506,7 +694,8 @@ ShellRoot {
             
             // ExclusionMode.Normal cuando está inactivo permite que el compositor
             // (Hyprland) envíe eventos de hover. ExclusionMode.Ignore los bloquea.
-            exclusionMode: dm.active ? ExclusionMode.Exclusive : ExclusionMode.Normal
+            exclusionMode: ExclusionMode.Normal
+            exclusiveZone: dm.active ? implicitHeight : 0
             
             WlrLayershell.keyboardFocus: dm.active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             
@@ -515,7 +704,7 @@ ShellRoot {
             DockManager { 
                 id: dm
                 anchors.fill: parent 
-                externalActive: (dockVisible && screen.name === dockMonitor)
+                externalActive: (dockVisible && monitorName === dockMonitor)
             }
         }
     }

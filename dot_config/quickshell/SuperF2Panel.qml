@@ -8,6 +8,7 @@ import "components"
 
 Item {
     id: root
+    RuntimePaths { id: runtimePaths }
 
     property bool active: false
     property real neckOffset: 0
@@ -130,7 +131,7 @@ Item {
                         Text { anchors.centerIn: parent; text: "󰅖"; font.family: root.font; font.pixelSize: 18 * root.scale; color: root.cText }
                         MouseArea {
                             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            onClicked: { mProc.command = ["sh", "-c", "echo 'hidden' > ${XDG_RUNTIME_DIR:-/tmp}/qs-super-f2"]; mProc.running = true }
+                            onClicked: { mProc.command = ["sh", "-c", "printf 'hidden\\n' > \"$1\"", "qs-super-f2-hide", runtimePaths.runtimeDir + "/qs-super-f2"]; mProc.running = true }
                         }
                     }
                 }

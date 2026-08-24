@@ -7,6 +7,7 @@ import "components"
 
 Item {
     id: root
+    RuntimePaths { id: runtimePaths }
 
     property bool active: false
     property real neckOffset: 0
@@ -84,7 +85,7 @@ Item {
 
     Process {
         id: eqLoaderProc
-        command: ["sh", "-c", "for i in {0..9}; do cat ${XDG_RUNTIME_DIR:-/tmp}/qs-eq/band-$i 2>/dev/null || echo '0.0'; done; cat ${XDG_RUNTIME_DIR:-/tmp}/qs-eq/preset 2>/dev/null || echo 'Flat'"]
+        command: ["sh", "-c", "for i in 0 1 2 3 4 5 6 7 8 9; do cat \"$1/qs-eq/band-$i\" 2>/dev/null || echo '0.0'; done; cat \"$1/qs-eq/preset\" 2>/dev/null || echo 'Flat'", "eq-reader", runtimePaths.runtimeDir]
         stdout: StdioCollector {
             onStreamFinished: {
                 var lines = text.trim().split("\n")
@@ -102,7 +103,7 @@ Item {
 
     // ── DATA SYNC ──
     Process {
-        id: mprisProc; command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-mpris 2>/dev/null"]
+        id: mprisProc; command: ["cat", runtimePaths.runtimeDir + "/qs-mpris"]
         stdout: StdioCollector {
             onStreamFinished: {
             var lines = text.trim().split("\n")

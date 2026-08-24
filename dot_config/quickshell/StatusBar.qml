@@ -10,6 +10,11 @@ import "components"
 
 Item {
     id: root
+    RuntimePaths { id: runtimePaths }
+    // Contract: published anchor X is relative to the monitor's left edge and
+    // includes the top bar's left inset exactly once.
+    property string monitorName: ""
+    property real barLeftMargin: 0
 
     // ═══════════════════════════════════════════════
     // PALETA — Dinámica (se actualiza con el wallpaper)
@@ -48,12 +53,13 @@ Item {
     // Global coordinate helpers for panel alignment
     readonly property real mprisCenterWorldX: mprisAnchor ? getCenterWorldX(mprisAnchor) : 0
     readonly property real clockCenterWorldX: clockAnchor ? getCenterWorldX(clockAnchor) : 0
-    readonly property real aiUsageCenterWorldX: aiUsageAnchor ? getCenterWorldX(aiUsageAnchor) : 0
+    readonly property real aiUsageScreenX: aiUsageAnchor ? getCenterScreenX(aiUsageAnchor) : barLeftMargin
 
     // Update anchors when relevant properties change
     onMprisCenterWorldXChanged: updateAnchors()
     onClockCenterWorldXChanged: updateAnchors()
-    onAiUsageCenterWorldXChanged: updateAnchors()
+    onAiUsageScreenXChanged: updateAnchors()
+    onBarLeftMarginChanged: updateAnchors()
     
     // Also update when visibility changes
     Connections {
@@ -76,15 +82,14 @@ Item {
     Timer { interval: 1000; running: true; repeat: true; onTriggered: updateAnchors() }
 
     function updateAnchors() {
-        if (!parent || !parent.screen) return
-        var idx = parent.screen.index
-        var data = shellRoot.anchors
-        data[idx] = { 
+        if (!monitorName || monitorName.length === 0) return
+        var data = Object.assign({}, shellRoot.anchors || ({}))
+        data[monitorName] = {
             mpris: mprisCenterWorldX, 
             mprisWidth: mprisAnchor ? mprisAnchor.width : 0,
             clock: clockCenterWorldX,
             clockWidth: clockAnchor ? clockAnchor.width : 0,
-            aiUsage: aiUsageCenterWorldX,
+            aiUsageScreenX: aiUsageScreenX,
             aiUsageWidth: aiUsageAnchor ? aiUsageAnchor.width : 0
         }
         shellRoot.anchors = data // Trigger update
@@ -95,6 +100,12 @@ Item {
         // Map center of the item to global window coordinates
         var p = item.mapToItem(null, item.width / 2, 0)
         return p.x
+    }
+
+    function getCenterScreenX(item) {
+        if (!item) return barLeftMargin
+        var p = item.mapToItem(root, item.width / 2, 0)
+        return barLeftMargin + p.x
     }
 
     // MPRIS state via playerctl
@@ -216,7 +227,7 @@ Item {
     // MPRIS — read output from mpris-follow.sh (started globally in shell.qml)
     Process {
         id: mprisProc
-        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-mpris 2>/dev/null"]
+        command: ["cat", runtimePaths.runtimeDir + "/qs-mpris"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var lines = text.trim().split("\n")
@@ -544,22 +555,49 @@ Item {
         // ──────── 5. LOCAL OPENCODE AI USAGE ────────
         Pill {
             id: aiUsageAnchor
-            pillColor: root.cPill; hoverColor: root.cHover; hPad: 10
-            onClicked: shellRoot.toggleAiUsage(root.parent.screen.name)
+            pillColor: root.cPill; hoverColor: root.cHover; hPad: 12; vPad: 8
+            onClicked: shellRoot.toggleAiUsage(root.monitorName)
 
-            Row {
-                spacing: 5
-                Text {
-                    text: "󰚩"
-                    font.family: root.font; font.pixelSize: 14; color: root.cTeal
-                }
-                Text {
-                    text: "AI Usage"
-                    font.family: root.font; font.pixelSize: 11; font.bold: true; color: root.cText
-                }
-                Text {
-                    text: root.aiUsageSummary()
-                    font.family: root.font; font.pixelSize: 10; color: root.cSub
+            Item {
+                id: aiUsageContentBox
+                implicitWidth: aiUsageContent.implicitWidth
+                width: implicitWidth
+                implicitHeight: aiUsageContent.implicitHeight
+                height: implicitHeight
+
+                Row {
+                    id: aiUsageContent
+                    anchors.centerIn: parent
+                    width: implicitWidth
+                    height: 36
+                    spacing: 5
+                    Text {
+                        id: aiUsageIcon
+                        width: implicitWidth
+                        height: parent.height
+                        verticalAlignment: Text.AlignVCenter
+                        horizontalAlignment: Text.AlignHCenter
+                        text: "󰚩"
+                        font.family: root.font; font.pixelSize: 14; color: root.cTeal
+                    }
+                    Text {
+                        id: aiUsageLabel
+                        width: implicitWidth
+                        height: parent.height
+                        verticalAlignment: Text.AlignVCenter
+                        horizontalAlignment: Text.AlignHCenter
+                        text: "AI Usage"
+                        font.family: root.font; font.pixelSize: 11; font.bold: true; color: root.cText
+                    }
+                    Text {
+                        id: aiUsageValue
+                        width: implicitWidth
+                        height: parent.height
+                        verticalAlignment: Text.AlignVCenter
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.aiUsageSummary()
+                        font.family: root.font; font.pixelSize: 10; color: root.cSub
+                    }
                 }
             }
         }
