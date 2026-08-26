@@ -29,6 +29,23 @@ FocusScope {
     property var rawUsage: ({})
 
     RuntimePaths { id: runtimePaths }
+
+    FileView {
+        id: pinnedAppsFile
+        path: runtimePaths.scriptsDir + "/pinned_apps.json"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onTextChanged: root.loadPinned()
+    }
+    FileView {
+        id: hiddenAppsFile
+        path: runtimePaths.scriptsDir + "/hidden_apps.json"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onTextChanged: root.loadHidden()
+    }
     
     // Keyboard navigation
     property int focusedIndex: -1
@@ -219,18 +236,16 @@ FocusScope {
     Timer { id: hideTimer; interval: 1000; onTriggered: if (!root.launcherOpen && !root.isHovered) root.active = false }
 
     function loadPinned() {
-        var path = runtimePaths.scriptsDir + "/pinned_apps.json"
         try {
-            var content = Quickshell.readFile(path)
-            if (content) root.pinnedApps = JSON.parse(content)
+            var content = pinnedAppsFile.text()
+            root.pinnedApps = content ? JSON.parse(content) : []
         } catch(e) { root.pinnedApps = [] }
     }
     
     function loadHidden() {
-        var path = runtimePaths.scriptsDir + "/hidden_apps.json"
         try {
-            var content = Quickshell.readFile(path)
-            if (content) root.hiddenApps = JSON.parse(content)
+            var content = hiddenAppsFile.text()
+            root.hiddenApps = content ? JSON.parse(content) : []
         } catch(e) { root.hiddenApps = [] }
     }
     

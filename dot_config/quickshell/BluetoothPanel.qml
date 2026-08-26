@@ -7,6 +7,7 @@ import "components"
 
 Item {
     id: root
+    RuntimePaths { id: runtimePaths }
 
     property bool active: false
     property real neckOffset: 0
@@ -117,7 +118,7 @@ Item {
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                         onClicked: { 
-                            mProc.command = ["sh", "-c", "echo 'hidden' > ${XDG_RUNTIME_DIR:-/tmp}/qs-bt-panel"]
+                            mProc.command = ["sh", "-c", "printf 'hidden\\n' > \"$1\"", "qs-bt-hide", runtimePaths.runtimeDir + "/qs-bt-panel"]
                             mProc.running = true 
                         }
                     }

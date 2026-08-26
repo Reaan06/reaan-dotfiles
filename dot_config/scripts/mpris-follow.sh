@@ -1,6 +1,10 @@
 #!/bin/bash
 # mpris-follow.sh — Normalized Polling Version
-RTDIR="${XDG_RUNTIME_DIR:-/tmp}"
+SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
+[[ "$SCRIPT_DIR" == "${BASH_SOURCE[0]}" ]] && SCRIPT_DIR="."
+source "$SCRIPT_DIR/runtime-paths.sh"
+runtime_paths_load
+RTDIR="$RUNTIME_PATHS_RUNTIME_DIR"
 LOCK="$RTDIR/qs-mpris.lock"
 OUT="$RTDIR/qs-mpris"
 TMP="$RTDIR/qs-mpris.tmp"

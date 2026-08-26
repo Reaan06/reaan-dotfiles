@@ -13,7 +13,10 @@ Rastrea ventanas abiertas y gestiona apps fijadas.
 
 PINNED_FILE = os.path.expanduser('~/.config/scripts/pinned_apps.json')
 USAGE_FILE = os.path.expanduser('~/.cache/app_usage.json')
-STATE_FILE = os.path.expanduser('/tmp/qs-dock-state.json')
+STATE_FILE = os.path.join(
+    os.environ.get('QS_RUNTIME_DIR') or os.environ.get('XDG_RUNTIME_DIR') or '/tmp',
+    'qs-dock-state.json',
+)
 
 def load_pinned():
     if os.path.exists(PINNED_FILE):

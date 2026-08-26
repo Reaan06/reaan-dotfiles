@@ -2,7 +2,11 @@
 # audio-manager.sh — Toggle Audio Manager UI
 # Usage: audio-manager.sh toggle
 
-RTDIR="${XDG_RUNTIME_DIR:-/tmp}"
+SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
+[[ "$SCRIPT_DIR" == "${BASH_SOURCE[0]}" ]] && SCRIPT_DIR="."
+source "$SCRIPT_DIR/runtime-paths.sh"
+runtime_paths_load
+RTDIR="$RUNTIME_PATHS_RUNTIME_DIR"
 FILE="$RTDIR/qs-audio-manager"
 
 case "$1" in

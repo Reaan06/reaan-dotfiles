@@ -2,13 +2,15 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "components"
 
 // OSD — Volume/Brightness overlay on the right edge of the screen
-// Triggered by osd-control.sh writing to /tmp/qs-osd
+// Triggered by osd-control.sh writing to the shared runtime directory.
 // Auto-hides after 2 seconds
 
 Item {
     id: root
+    RuntimePaths { id: runtimePaths }
 
     readonly property string font: "JetBrains Mono Nerd Font"
     property color cPill: Qt.rgba(0.16, 0.16, 0.18, 0.92)
@@ -25,10 +27,10 @@ Item {
     property bool osdVisible: false
     property string _lastOsd: ""
 
-    // Poll /tmp/qs-osd for changes
+    // Poll the shared runtime state file for changes.
     Process {
         id: osdProc
-        command: ["sh", "-c", "cat ${XDG_RUNTIME_DIR:-/tmp}/qs-osd 2>/dev/null"]
+        command: ["cat", runtimePaths.runtimeDir + "/qs-osd"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var raw = text.trim()

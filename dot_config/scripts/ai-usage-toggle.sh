@@ -3,7 +3,11 @@
 
 set -euo pipefail
 
-RTDIR="${XDG_RUNTIME_DIR:-/tmp}"
+SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
+[[ "$SCRIPT_DIR" == "${BASH_SOURCE[0]}" ]] && SCRIPT_DIR="."
+source "$SCRIPT_DIR/runtime-paths.sh"
+runtime_paths_load
+RTDIR="$RUNTIME_PATHS_RUNTIME_DIR"
 FILE="$RTDIR/qs-ai-usage"
 FOCUSED="$(hyprctl monitors -j | jq -r '.[] | select(.focused == true) | .name' | head -n 1)"
 REQUESTED_MONITOR="${2:-}"

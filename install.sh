@@ -27,9 +27,473 @@ warn()    { echo -e "  ${YELLOW}⚠${NC} $1"; }
 fail()    { echo -e "  ${RED}✗${NC} $1"; }
 die()     { fail "$1"; exit 1; }
 
+terminal_config_root() {
+    printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}"
+}
+
+terminal_state_dir() {
+    printf '%s/reaan\n' "$(terminal_config_root)"
+}
+
+terminal_state_file() {
+    printf '%s/terminal-dots.conf\n' "$(terminal_state_dir)"
+}
+
+terminal_shell_state_file() {
+    printf '%s/terminal-shell.conf\n' "$(terminal_state_dir)"
+}
+
+terminal_herdr_config_file() {
+    printf '%s/herdr/config.toml\n' "$(terminal_config_root)"
+}
+
+upstream_managed_config_paths() {
+    printf '%s\n' \
+        "$HOME/.config/nvim" \
+        "$HOME/.config/fish" \
+        "$HOME/.zshrc" \
+        "$HOME/.oh-my-zsh" \
+        "$HOME/.config/nushell" \
+        "$HOME/.tmux.conf" \
+        "$HOME/.tmux" \
+        "$HOME/.config/zellij" \
+        "$HOME/.config/herdr" \
+        "$HOME/.config/alacritty" \
+        "$HOME/.config/wezterm" \
+        "$HOME/.wezterm.lua" \
+        "$HOME/.config/kitty" \
+        "$HOME/.config/ghostty" \
+        "$HOME/.config/starship.toml"
+}
+
+managed_config_has_special_entry() {
+    local path special
+    while IFS= read -r path; do
+        [[ -e "$path" || -L "$path" ]] || continue
+        if ! special="$(find -P -- "$path" \( -type s -o -type p -o -type b -o -type c \) -print -quit 2>/dev/null)"; then
+            return 1
+        fi
+        [[ -z "$special" ]] || return 0
+    done < <(upstream_managed_config_paths)
+    return 2
+}
+
+create_safe_config_backup() {
+    local backup_dir archive path relative
+    local -a existing_paths=()
+
+    backup_dir="$(mktemp -d "$HOME/.gentleman-safe-backup-$(date +%Y%m%d-%H%M%S)-XXXXXX")" || return 1
+    archive="$backup_dir/configs.tar.gz"
+    while IFS= read -r path; do
+        if [[ -e "$path" || -L "$path" ]]; then
+            relative="${path#"$HOME/"}"
+            existing_paths+=("$relative")
+        fi
+    done < <(upstream_managed_config_paths)
+
+    if ((${#existing_paths[@]} == 0)) || ! tar -C "$HOME" -czf "$archive" -- "${existing_paths[@]}"; then
+        rm -rf -- "$backup_dir"
+        return 1
+    fi
+    chmod 700 "$backup_dir" || { rm -rf -- "$backup_dir"; return 1; }
+    printf '%s\n' "$backup_dir"
+}
+
+restore_safe_config_backup() {
+    local backup_dir="$1" archive="$1/configs.tar.gz"
+
+    [[ -f "$archive" ]] || return 1
+    tar -C "$HOME" --extract --gzip --file "$archive" --overwrite
+}
+
+gentleman_installer_url() {
+    case "$(uname -m)" in
+        x86_64) printf '%s\n' 'https://github.com/Gentleman-Programming/Gentleman.Dots/releases/latest/download/gentleman-installer-linux-amd64' ;;
+        aarch64) printf '%s\n' 'https://github.com/Gentleman-Programming/Gentleman.Dots/releases/latest/download/gentleman-installer-linux-arm64' ;;
+        *) fail "Unsupported architecture: $(uname -m). Gentleman.Dots supports Linux x86_64 and aarch64."; return 1 ;;
+    esac
+}
+
+write_terminal_state() {
+    local value="$1"
+    local directory="$(terminal_state_dir)"
+    local file="$(terminal_state_file)"
+    local temporary old_umask
+
+    case "$value" in
+        none|herdr|tmux|zellij) ;;
+        *) fail "Invalid terminal state: $value"; return 1 ;;
+    esac
+
+    mkdir -p "$directory" || return 1
+    chmod 700 "$directory" || return 1
+    old_umask="$(umask)"
+    umask 077
+    if ! temporary="$(mktemp "$directory/.terminal-dots.conf.XXXXXX")"; then
+        umask "$old_umask"
+        return 1
+    fi
+    if ! printf '%s\n' "$value" > "$temporary"; then
+        rm -f -- "$temporary"
+        umask "$old_umask"
+        return 1
+    fi
+    if ! chmod 600 "$temporary"; then
+        rm -f -- "$temporary"
+        umask "$old_umask"
+        return 1
+    fi
+    if ! mv -f "$temporary" "$file"; then
+        rm -f -- "$temporary"
+        umask "$old_umask"
+        return 1
+    fi
+    umask "$old_umask"
+    chmod 600 "$file"
+}
+
+write_terminal_shell_state() {
+    local value="$1"
+    local directory="$(terminal_state_dir)"
+    local file="$(terminal_shell_state_file)"
+    local temporary old_umask
+
+    case "$value" in
+        none|fish|zsh|nushell) ;;
+        *) fail "Invalid terminal shell state: $value"; return 1 ;;
+    esac
+
+    mkdir -p "$directory" || return 1
+    chmod 700 "$directory" || return 1
+    old_umask="$(umask)"
+    umask 077
+    if ! temporary="$(mktemp "$directory/.terminal-shell.conf.XXXXXX")"; then
+        umask "$old_umask"
+        return 1
+    fi
+    if ! printf '%s\n' "$value" > "$temporary" || ! chmod 600 "$temporary" || ! mv -f "$temporary" "$file"; then
+        rm -f -- "$temporary"
+        umask "$old_umask"
+        return 1
+    fi
+    umask "$old_umask"
+    chmod 600 "$file"
+}
+
+read_terminal_state() {
+    local file="$(terminal_state_file)"
+    local -a lines=()
+
+    if [[ ! -f "$file" || ! -r "$file" ]]; then
+        printf 'none\n'
+        return 0
+    fi
+    mapfile -t lines < "$file" || {
+        printf 'none\n'
+        return 0
+    }
+    if (( ${#lines[@]} != 1 )); then
+        printf 'none\n'
+        return 0
+    fi
+    case "${lines[0]}" in
+        none|herdr|tmux|zellij) printf '%s\n' "${lines[0]}" ;;
+        *) printf 'none\n' ;;
+    esac
+}
+
+read_terminal_shell_state() {
+    local file="$(terminal_shell_state_file)" value
+    local -a lines=()
+    [[ -f "$file" && -r "$file" ]] || { printf 'none\n'; return 0; }
+    mapfile -t lines < "$file" || { printf 'none\n'; return 0; }
+    (( ${#lines[@]} == 1 )) || { printf 'none\n'; return 0; }
+    value="${lines[0]}"
+    case "$value" in
+        none|fish|zsh|nushell) printf '%s\n' "$value" ;;
+        *) printf 'none\n' ;;
+    esac
+}
+
+terminal_shell_executable() {
+    case "$1" in
+        fish) printf 'fish\n' ;;
+        zsh) printf 'zsh\n' ;;
+        nushell) printf 'nu\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+terminal_shell_config_file() {
+    case "$1" in
+        fish) printf '%s\n' "$HOME/.config/fish/config.fish" ;;
+        zsh) printf '%s\n' "$HOME/.zshrc" ;;
+        nushell) printf '%s\n' "$HOME/.config/nushell/config.nu" ;;
+        *) return 1 ;;
+    esac
+}
+
+configure_kitty_shell() {
+    local shell="$1" executable config temporary
+    executable="$(terminal_shell_executable "$shell")" || return 1
+    config="$HOME/.config/kitty/kitty.conf"
+    [[ -f "$config" ]] || return 1
+    temporary="$(mktemp "${config}.XXXXXX")" || return 1
+    if ! awk -v executable="$executable" '
+        /^[[:space:]]*shell[[:space:]]+/ {
+            if (!replaced) { print "shell " executable; replaced = 1 }
+            next
+        }
+        { print }
+        END { if (!replaced) print "\n# Managed by Gentleman.Dots selection\nshell " executable }
+    ' "$config" > "$temporary"; then
+        rm -f -- "$temporary"
+        return 1
+    fi
+    chmod 600 "$temporary" && mv -f "$temporary" "$config" || { rm -f -- "$temporary"; return 1; }
+}
+
+kitty_effective_shell() {
+    local config="${1:-$HOME/.config/kitty/kitty.conf}"
+    [[ -r "$config" ]] || return 1
+    awk '/^[[:space:]]*shell[[:space:]]+/ { value=$2 } END { if (value) print value; else exit 1 }' "$config"
+}
+
+normalize_terminal_dots_answer() {
+    local answer="${1,,}"
+    answer="${answer#"${answer%%[![:space:]]*}"}"
+    answer="${answer%"${answer##*[![:space:]]}"}"
+    case "$answer" in
+        ''|n|no|0|false|off|2) printf 'none\n' ;;
+        y|yes|s|si|1|true|on) printf 'enabled\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+normalize_terminal_runtime_answer() {
+    local answer="${1,,}"
+    answer="${answer#"${answer%%[![:space:]]*}"}"
+    answer="${answer%"${answer##*[![:space:]]}"}"
+    case "$answer" in
+        ''|h|herdr|1) printf 'herdr\n' ;;
+        t|tmux|2) printf 'tmux\n' ;;
+        z|zellij|3) printf 'zellij\n' ;;
+        n|none|4) printf 'none\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+normalize_terminal_shell_answer() {
+    local answer="${1,,}"
+    answer="${answer#"${answer%%[![:space:]]*}"}"
+    answer="${answer%"${answer##*[![:space:]]}"}"
+    case "$answer" in
+        ''|z|zsh|2) printf 'zsh\n' ;;
+        f|fish|1) printf 'fish\n' ;;
+        n|nu|nushell|3) printf 'nushell\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+prompt_terminal_shell() {
+    local answer normalized
+    while true; do
+        printf '  1) Fish\n  2) Zsh\n  3) Nushell\n' >&2
+        read -r -p "  Opción (1-3, Zsh por defecto): " answer || answer=''
+        if normalized="$(normalize_terminal_shell_answer "$answer")"; then
+            printf '%s\n' "$normalized"
+            return 0
+        fi
+        warn "Invalid shell. Use a number between 1 and 3." >&2
+    done
+}
+
+prompt_terminal_dots() {
+    local answer normalized
+    while true; do
+        printf '  1) Sí\n  2) No\n' >&2
+        read -r -p "  Opción (1-2, No por defecto): " answer || answer=''
+        if normalized="$(normalize_terminal_dots_answer "$answer")"; then
+            printf '%s\n' "$normalized"
+            return 0
+        fi
+        warn "Respuesta inválida. Usa un número entre 1 y 2." >&2
+    done
+}
+
+prompt_terminal_runtime() {
+    local answer normalized
+    while true; do
+        printf '  1) Herdr\n  2) TMUX\n  3) Zellij\n  4) None\n' >&2
+        read -r -p "  Opción (1-4, Herdr por defecto): " answer || answer=''
+        if normalized="$(normalize_terminal_runtime_answer "$answer")"; then
+            printf '%s\n' "$normalized"
+            return 0
+        fi
+        warn "Invalid WM/session. Use a number between 1 and 4." >&2
+    done
+}
+
+preserve_herdr_config() {
+    local source="$DOTFILES_DIR/dot_config/herdr/config.toml"
+    local destination="$(terminal_herdr_config_file)"
+
+    [[ -f "$source" ]] || return 0
+    [[ -e "$destination" || -L "$destination" ]] && return 0
+    mkdir -p "$(dirname -- "$destination")" || return 1
+    cp -p -- "$source" "$destination"
+}
+
+install_gentleman_dots() {
+    local shell="$1" wm="$2"
+    local backup_flag='--backup=true' safe_backup_dir
+
+    if managed_config_has_special_entry; then
+        safe_backup_dir="$(create_safe_config_backup)" || {
+            fail "Unable to create a safe backup for special config entries; terminal DOTS remain disabled."
+            return 1
+        }
+        backup_flag='--backup=false'
+        info "Special config entry detected; safe backup saved at: $safe_backup_dir"
+    elif [[ "$?" -ne 2 ]]; then
+        fail "Unable to inspect managed config entries; terminal DOTS remain disabled."
+        return 1
+    fi
+    if ! (
+        local url binary workdir
+        url="$(gentleman_installer_url)" || exit 1
+        umask 077
+        workdir="$(mktemp -d "${TMPDIR:-/tmp}/gentleman-dots.XXXXXX")" || exit 1
+        trap 'rm -rf -- "$workdir"' EXIT
+        binary="$workdir/gentleman-installer"
+        chmod 700 "$workdir"
+        : > "$binary"
+        chmod 700 "$binary"
+        if ! curl --fail --location --silent --show-error --output "$binary" "$url"; then
+            fail "Gentleman.Dots download failed; terminal DOTS remain disabled."
+            exit 1
+        fi
+        chmod 700 "$binary"
+        if ! (cd -- "$workdir" && "$binary" --non-interactive --terminal=kitty "--shell=$shell" "--wm=$wm" "$backup_flag"); then
+            fail "Gentleman.Dots installation failed; terminal DOTS remain disabled."
+            exit 1
+        fi
+    ); then
+        if [[ -n "${safe_backup_dir:-}" ]]; then
+            # The upstream process may have changed managed files before failing.
+            if ! restore_safe_config_backup "$safe_backup_dir"; then
+                fail "Unable to restore the safe config snapshot; terminal DOTS remain disabled."
+                return 1
+            fi
+            ok "Safe config snapshot restored after Gentleman.Dots failure."
+        fi
+        return 1
+    fi
+}
+
+configure_terminal_dots() {
+    local selection shell
+
+    selection="$(prompt_terminal_dots)"
+    if ! write_terminal_state none || ! write_terminal_shell_state none; then
+        fail "Unable to disable terminal DOTS safely."
+        return 1
+    fi
+    if [[ "$selection" == none ]]; then
+        info "Terminal DOTS disabled; no shell/session selected and existing files were preserved."
+        return 0
+    fi
+
+    shell="$(prompt_terminal_shell)"
+    selection="$(prompt_terminal_runtime)"
+    if ! write_terminal_state none || ! write_terminal_shell_state none; then
+        fail "Unable to reset terminal DOTS before installation."
+        return 1
+    fi
+    case "$selection" in
+        herdr|tmux|zellij|none) ;;
+        *)
+            fail "Invalid terminal WM/session selection."
+            write_terminal_state none || true
+            write_terminal_shell_state none || true
+            return 1
+            ;;
+    esac
+    if ! install_gentleman_dots "$shell" "$selection"; then
+        write_terminal_state none || true
+        write_terminal_shell_state none || true
+        return 1
+    fi
+    if [[ "$selection" == herdr ]] && ! preserve_herdr_config; then
+        write_terminal_state none || true
+        write_terminal_shell_state none || true
+        return 1
+    fi
+    if ! write_terminal_state "$selection" || ! write_terminal_shell_state "$shell"; then
+        write_terminal_state none || true
+        write_terminal_shell_state none || true
+        fail "Unable to activate terminal DOTS safely."
+        return 1
+    fi
+    ok "Terminal DOTS configured: $shell / $selection"
+}
+
+validate_terminal_selection() {
+    local selected_shell selected_session shell_executable shell_config session_label session_command effective_shell
+
+    selected_shell="$(read_terminal_shell_state)"
+    selected_session="$(read_terminal_state)"
+    if [[ "$selected_shell" == none ]]; then
+        info "Selected shell: None; config: None"
+        info "Selected session: None (no shell/session selected)"
+        return 0
+    fi
+
+    shell_executable="$(terminal_shell_executable "$selected_shell")"
+    shell_config="$(terminal_shell_config_file "$selected_shell")"
+    info "Selected shell: $selected_shell ($shell_executable); config: $shell_config"
+    if [[ -f "$shell_config" ]]; then
+        ok "$(basename "$shell_config") deployed"
+    else
+        fail "$(basename "$shell_config") NOT found"
+        all_ok=false
+    fi
+    if command -v "$shell_executable" &>/dev/null; then
+        ok "$shell_executable available"
+    else
+        fail "$shell_executable NOT available"
+        all_ok=false
+    fi
+
+    case "$selected_session" in
+        herdr) session_label="Herdr"; session_command="$HOME/.local/bin/herdr" ;;
+        tmux) session_label="TMUX"; session_command="$(command -v tmux 2>/dev/null || true)" ;;
+        zellij) session_label="Zellij"; session_command="$(command -v zellij 2>/dev/null || true)" ;;
+        *) selected_session=none; session_label="None"; session_command='' ;;
+    esac
+    if [[ "$selected_session" == none ]]; then
+        info "Selected session: None"
+    elif [[ -x "$session_command" ]]; then
+        ok "Selected session: $session_label (available)"
+    else
+        fail "Selected session: $session_label (unavailable)"
+        all_ok=false
+    fi
+
+    effective_shell="$(kitty_effective_shell 2>/dev/null || true)"
+    if [[ "$effective_shell" == "$shell_executable" ]]; then
+        ok "Kitty effective shell matches selection: $effective_shell"
+    else
+        fail "Kitty effective shell '$effective_shell' does not match selection '$shell_executable'"
+        all_ok=false
+    fi
+}
+
 # ═══════════════════════════════════════════════════════════════
 #  Validaciones
 # ═══════════════════════════════════════════════════════════════
+
+main() {
 
 [ -f /etc/arch-release ] || die "Este script es exclusivo para Arch Linux."
 
@@ -74,6 +538,10 @@ echo ""
 read -rp "  ¿Instalar Docker? (s/n): " _docker
 read -rp "  ¿Instalar Steam?  (s/n): " _steam
 
+if ! configure_terminal_dots; then
+    warn "Terminal DOTS no configurados; continuando con la instalación base."
+fi
+
 # ═══════════════════════════════════════════════════════════════
 #  Paquetes
 # ═══════════════════════════════════════════════════════════════
@@ -91,8 +559,8 @@ CORE=(
     # Notificaciones
     swaync
 
-    # Terminal + Zsh
-    kitty zsh zsh-autosuggestions zsh-syntax-highlighting
+    # Terminal emulator (Gentleman.Dots owns shell packages and configuration)
+    kitty
 
     # Launcher
     rofi-wayland
@@ -172,12 +640,22 @@ deploy "dot_config/nvim"        "$HOME/.config/nvim"
 deploy "dot_config/cava"        "$HOME/.config/cava"
 deploy "dot_config/scripts"     "$HOME/.config/scripts"
 deploy "dot_config/qt6ct"       "$HOME/.config/qt6ct"
-deploy "dot_zshrc"              "$HOME/.zshrc"
 
 chmod +x "$HOME/.config/scripts/"* 2>/dev/null || true
 chmod +x "$HOME/.config/hypr/scripts/"* 2>/dev/null || true
 
 ok "Configuraciones base desplegadas con éxito."
+
+selected_shell="$(read_terminal_shell_state)"
+if [[ "$selected_shell" != none ]]; then
+    if ! configure_kitty_shell "$selected_shell"; then
+        write_terminal_state none || true
+        write_terminal_shell_state none || true
+        warn "Kitty shell configuration failed; terminal DOTS remain disabled."
+    else
+        ok "Kitty configured for $(terminal_shell_executable "$selected_shell")"
+    fi
+fi
 
 # ═══════════════════════════════════════════════════════════════
 #  Instalación de Software
@@ -348,42 +826,6 @@ fi
 ok "Dotfiles desplegados"
 
 # ═══════════════════════════════════════════════════════════════
-#  Configuración de Zsh
-# ═══════════════════════════════════════════════════════════════
-
-header "Configurando Shell"
-
-ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    info "Instalando Oh My Zsh..."
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-    ok "Oh My Zsh instalado"
-fi
-
-if [ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]; then
-    info "Instalando Powerlevel10k..."
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
-    ok "Powerlevel10k instalado"
-fi
-
-if [ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]; then
-    info "Instalando zsh-autosuggestions..."
-    git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
-fi
-
-if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
-    info "Instalando zsh-syntax-highlighting..."
-    git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
-fi
-
-if [ "$SHELL" != "$(which zsh)" ]; then
-    info "Cambiando shell por defecto a zsh..."
-    sudo chsh -s "$(which zsh)" "$USER"
-    ok "Shell cambiada a zsh"
-fi
-
-# ═══════════════════════════════════════════════════════════════
 #  Servicios del sistema
 # ═══════════════════════════════════════════════════════════════
 
@@ -413,7 +855,7 @@ for app in "${REQUIRED[@]}"; do
 done
 
 # Verificar que los archivos de configuración existen
-for cfg in ~/.config/quickshell/shell.qml ~/.config/hypr/hyprland.conf ~/.zshrc; do
+for cfg in ~/.config/quickshell/shell.qml ~/.config/hypr/hyprland.conf; do
     if [ -f "$cfg" ]; then
         ok "$(basename "$cfg") desplegado"
     else
@@ -421,6 +863,8 @@ for cfg in ~/.config/quickshell/shell.qml ~/.config/hypr/hyprland.conf ~/.zshrc;
         all_ok=false
     fi
 done
+
+validate_terminal_selection
 
 # ═══════════════════════════════════════════════════════════════
 #  Resumen
@@ -468,4 +912,9 @@ if [ "$all_ok" = true ]; then
 else
     fail "Algunos componentes fallaron. Revisa los errores arriba."
     exit 1
+fi
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
 fi

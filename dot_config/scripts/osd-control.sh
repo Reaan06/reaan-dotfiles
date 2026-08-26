@@ -3,7 +3,11 @@
 # Usage: osd-control.sh volume up|down|mute
 #        osd-control.sh brightness up|down
 
-OSD_FILE="${XDG_RUNTIME_DIR:-/tmp}/qs-osd"
+SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
+[[ "$SCRIPT_DIR" == "${BASH_SOURCE[0]}" ]] && SCRIPT_DIR="."
+source "$SCRIPT_DIR/runtime-paths.sh"
+runtime_paths_load
+OSD_FILE="$RUNTIME_PATHS_RUNTIME_DIR/qs-osd"
 TYPE="$1"
 ACTION="$2"
 

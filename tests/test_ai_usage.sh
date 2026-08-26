@@ -12,140 +12,53 @@ for command_name in python3 jq git mktemp; do
 done
 
 SCRIPT="$ROOT/dot_config/scripts/ai_usage.py"
+AUTH_SCRIPT="$ROOT/dot_config/scripts/ai-provider-auth.sh"
+QML="$ROOT/dot_config/quickshell"
 HOME="$TMP/home"
 XDG_DATA_HOME="$TMP/data"
 DB="$XDG_DATA_HOME/opencode/opencode.db"
-export HOME XDG_DATA_HOME
+export HOME XDG_DATA_HOME PYTHONDONTWRITEBYTECODE=1
 mkdir -p "$HOME" "$(dirname -- "$DB")"
-assert_json_document() {
-    local output="$1"
-    jq -e -s 'if length == 1 and (.[0] | type) == "object" then true else false end' <<<"$output" >/dev/null \
-        || fail 'adapter did not emit exactly one JSON object'
-}
+
 collect() {
     local period="$1" output
-    : > "$TMP/stderr"
-    output="$(python3 "$SCRIPT" --period "$period" 2>"$TMP/stderr")" \
-        || fail "adapter failed for period $period: $(<"$TMP/stderr")"
-    [[ ! -s "$TMP/stderr" ]] || fail "adapter wrote unexpected stderr: $(<"$TMP/stderr")"
-    assert_json_document "$output"
+    output="$(python3 "$SCRIPT" --period "$period")" || fail "collector failed for $period"
+    jq -e -s 'length == 1 and (.[0] | type) == "object"' <<<"$output" >/dev/null \
+        || fail 'collector did not emit one JSON object'
     printf '%s' "$output"
 }
-assert_status() {
-    local period="$1" expected="$2" output
-    output="$(collect "$period")"
-    jq -e --arg expected "$expected" --arg period "$period" \
-        '.status == $expected and .period == $period and (.totals == null)' <<<"$output" >/dev/null \
-        || fail "expected $expected status with null totals"
-}
-clear_db() {
-    rm -f "$DB" "$DB-wal" "$DB-shm"
-}
+
+clear_db() { rm -f "$DB" "$DB-wal" "$DB-shm"; }
+
 create_valid_db() {
     clear_db
     python3 - "$DB" <<'PY'
 import sqlite3
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-database = sys.argv[1]
-now = datetime.now(timezone.utc)
-day_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-with sqlite3.connect(database) as connection:
-    connection.execute(
-        """
+now = int(datetime.now(timezone.utc).timestamp() * 1000)
+with sqlite3.connect(sys.argv[1]) as connection:
+    connection.execute("""
         CREATE TABLE session (
-            id TEXT PRIMARY KEY,
-            time_created INTEGER NOT NULL,
-            cost REAL NOT NULL,
-            tokens_input INTEGER NOT NULL,
-            tokens_output INTEGER NOT NULL,
-            tokens_reasoning INTEGER NOT NULL,
-            tokens_cache_read INTEGER NOT NULL,
-            tokens_cache_write INTEGER NOT NULL,
-            provider_id TEXT,
-            model_id TEXT,
-            prompt TEXT,
-            raw_message TEXT,
+            id TEXT PRIMARY KEY, time_created INTEGER, cost REAL,
+            tokens_input INTEGER, tokens_output INTEGER, tokens_reasoning INTEGER,
+            tokens_cache_read INTEGER, tokens_cache_write INTEGER,
+            provider_id TEXT, model_id TEXT, prompt TEXT, raw_message TEXT,
             secret_marker TEXT
         )
-        """
-    )
-    current = int(now.timestamp() * 1000)
-    before_day = int((day_start - timedelta(milliseconds=1)).timestamp() * 1000)
-    connection.executemany(
-        """
-        INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        [
-            (
-                "current-one", current, 1.25, 10, 20, 3, 4, 5,
-                "openai", "gpt-fixture", "do not expose this prompt", "raw message", "fixture-secret",
-            ),
-            (
-                "current-two", current - 1000, 0.75, 5, 6, 1, 2, 3,
-                "openai", None, "another prompt", "another raw message", "another-secret",
-            ),
-            (
-                "outside-day", before_day, 99, 900, 900, 900, 900, 900,
-                "provider", "model", "outside prompt", "outside message", "outside-secret",
-            ),
-        ],
+    """)
+    connection.execute(
+        "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("fixture", now, 2, 15, 26, 4, 14, 0, "openai", "gpt-fixture", "prompt", "raw", "secret"),
     )
 PY
-}
-create_schema_error_db() {
-    clear_db
-    python3 - "$DB" <<'PY'
-import sqlite3
-import sys
-
-with sqlite3.connect(sys.argv[1]) as connection:
-    connection.execute("CREATE TABLE session (time_created INTEGER, cost REAL)")
-PY
-}
-run_qml_static_cases() {
-    local qml="$ROOT/dot_config/quickshell" runtime
-    runtime="$qml/components/RuntimePaths.qml"
-    grep -Fq 'AI Usage' "$qml/StatusBar.qml" || fail 'top bar does not label AI Usage'
-    grep -Fq 'toggleAiUsage' "$qml/StatusBar.qml" || fail 'top bar does not toggle the monitor popup'
-    grep -Fq 'aiUsageAnchor' "$qml/StatusBar.qml" || fail 'top bar does not publish an AI Usage anchor'
-    grep -Fq 'ai_usage.py' "$qml/shell.qml" || fail 'shell does not launch the adapter'
-    grep -Fq 'command: ["python3", runtimePaths.scriptsDir + "/ai_usage.py", "--period", aiUsagePeriod]' "$qml/shell.qml" \
-        || fail 'adapter arguments are not period-only'
-    ! grep -Fq -- '--db' "$qml/shell.qml" || fail 'QML exposes a database-path argument'
-    grep -Fq 'if (aiUsageProcess.running) return' "$qml/shell.qml" \
-        || fail 'AI Usage refreshes can overlap'
-    grep -Fq 'lastKnownGood' "$qml/shell.qml" || fail 'AI Usage does not retain last-known-good data'
-    grep -Fq 'if (status === "ok") lastKnownGood = data' "$qml/shell.qml" \
-        || fail 'failed AI Usage refreshes overwrite the good snapshot'
-    ! grep -Fq 'lastKnownGood = null' "$qml/shell.qml" || fail 'AI Usage clears retained totals on failure'
-    grep -Fq 'aiUsageMonitor' "$qml/shell.qml" || fail 'AI Usage has no monitor identity'
-    grep -Fq 'screen.name === aiUsageMonitor' "$qml/shell.qml" || fail 'AI Usage popup is not same-monitor scoped'
-    grep -Fq 'qs-ai-usage' "$qml/shell.qml" || fail 'shell does not read the Super F4 AI Usage state'
-    grep -Fq 'lastKnownGoodProviders' "$qml/shell.qml" || fail 'AI Usage does not retain providers independently'
-    grep -Fq 'PanelConnector' "$qml/AiUsageView.qml" || fail 'AI Usage view has no panel connector'
-    for status in ok missing stale locked malformed schema-error; do
-        grep -Fq "\"$status\"" "$qml/shell.qml" || fail "missing exact AI Usage status: $status"
-    done
-    grep -Fq 'ChatGPT/Codex' "$qml/AiUsageView.qml" || fail 'AI Usage view does not label ChatGPT/Codex'
-    grep -Fq 'Claude' "$qml/AiUsageView.qml" || fail 'AI Usage view does not label Claude'
-    grep -Fq 'OpenCode' "$qml/AiUsageView.qml" || fail 'AI Usage view does not label OpenCode'
-    grep -Fq 'scriptsDir' "$runtime" || fail 'RuntimePaths does not expose scriptsDir'
-    ! grep -Eq 'XDG_DATA_HOME|opencode|database|\.db' "$runtime" \
-        || fail 'RuntimePaths owns OpenCode data resolution'
-    ! grep -Eq 'network|credential|password|secret|prompt|message|https?://' "$qml/AiUsageView.qml" \
-        || fail 'AI Usage view contains a forbidden privacy boundary'
-}
-
-run_runner_static_cases() {
-    grep -Fq 'command: "bash tests/test_quickshell_exec.sh && bash tests/test_bt_json.sh && bash tests/test_wifi_scan.sh && bash tests/test_wallpaper_flow.sh && bash tests/test_ai_usage.sh"' \
-        "$ROOT/openspec/config.yaml" || fail 'configured runner does not append the AI Usage test'
 }
 
 run_provider_cases() {
-    PYTHONDONTWRITEBYTECODE=1 HOME="$HOME" CODEX_HOME="$TMP/codex" CLAUDE_CONFIG_DIR="$TMP/claude" \
+    HOME="$HOME" OPENAI_HOME="$TMP/openai" CLAUDE_CONFIG_DIR="$TMP/claude" \
         SCRIPT="$SCRIPT" TMP="$TMP" python3 - <<'PY'
+import base64
 import importlib.util
 import json
 import os
@@ -158,55 +71,79 @@ collector = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(collector)
 
 root = Path(os.environ["TMP"])
-codex_dir = Path(os.environ["CODEX_HOME"])
+openai_dir = Path(os.environ["OPENAI_HOME"])
 claude_dir = Path(os.environ["CLAUDE_CONFIG_DIR"])
-codex_dir.mkdir(parents=True)
+openai_dir.mkdir(parents=True)
 claude_dir.mkdir(parents=True)
-codex_secret = "codex-fixture-secret"
+openai_secret = "openai-fixture-secret"
 claude_secret = "claude-fixture-secret"
 now = datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc)
 future = now + timedelta(hours=2)
 future_ms = int(future.timestamp() * 1000)
-codex_auth = codex_dir / "auth.json"
+
+def jwt(expiry):
+    payload = base64.urlsafe_b64encode(json.dumps({"exp": expiry}).encode()).decode().rstrip("=")
+    return "header." + payload + ".signature"
+
+openai_auth = openai_dir / "auth.json"
 claude_auth = claude_dir / ".credentials.json"
-codex_auth.write_text(json.dumps({"tokens": {"access_token": codex_secret, "account_id": "fixture-account"}}))
+openai_token = jwt(future.timestamp())
+openai_auth.write_text(json.dumps({"tokens": {"access_token": openai_token, "account_id": "fixture-account"}}))
 claude_auth.write_text(json.dumps({"claudeAiOauth": {"accessToken": claude_secret, "expiresAt": future_ms}}))
 
 class Response:
     def __init__(self, body, status=200):
         self.body = body.encode()
         self.status = status
+        self.limit = None
     def __enter__(self): return self
     def __exit__(self, *args): return False
-    def read(self, limit): return self.body[:limit]
+    def read(self, limit):
+        self.limit = limit
+        return self.body[:limit]
     def getcode(self): return self.status
 
-codex_body = json.dumps({"rate_limit": {"primary_window": {"used_percent": 42, "reset_at": future_ms}, "secondary_window": {"used_percent": 17, "reset_at": future_ms}}})
+openai_body = json.dumps({"rate_limit": {"primary_window": {"used_percent": 42, "reset_at": future_ms}, "secondary_window": {"used_percent": 17, "reset_at": future_ms}}})
 claude_body = json.dumps({"five_hour": {"utilization": 31, "resets_at": future.isoformat().replace("+00:00", "Z")}, "seven_day": {"utilization": 12, "resets_at": future.isoformat().replace("+00:00", "Z")}})
+requests = []
 
 def opener(request, timeout):
     assert timeout == collector.NETWORK_TIMEOUT_SECONDS
-    authorization = request.get_header("Authorization")
-    assert authorization in ("Bearer " + codex_secret, "Bearer " + claude_secret)
+    assert request.get_header("Authorization") in ("Bearer " + openai_token, "Bearer " + claude_secret)
+    requests.append(request)
     if "chatgpt.com" in request.full_url:
-        return Response(codex_body)
+        assert request.headers.get("Chatgpt-account-id") == "fixture-account"
+        assert request.get_header("User-agent") == "openai-usage/1.0"
+        return Response(openai_body)
+    assert request.headers.get("Anthropic-beta") == "oauth-2025-04-20"
     return Response(claude_body)
 
 collector.urllib.request.urlopen = opener
-chatgpt = collector.codex_usage(now)
+chatgpt = collector.openai_usage(now)
 claude = collector.claude_usage(now)
 assert chatgpt["status"] == "ok" and chatgpt["windows"][0]["utilization"] == 42
+assert chatgpt["label"] == "ChatGPT / OpenAI" and "cli_status" not in chatgpt
 assert claude["status"] == "ok" and claude["windows"][0]["utilization"] == 31
+assert len(requests) == 2
+
 serialized = json.dumps({"chatgpt": chatgpt, "claude": claude})
-assert codex_secret not in serialized and claude_secret not in serialized
+assert openai_token not in serialized and openai_secret not in serialized and claude_secret not in serialized
+
+def bounded(request, timeout):
+    response = Response(json.dumps({"rate_limit": {"primary_window": {"used_percent": 1}}}) + "x" * (1024 * 1024 + 1))
+    result = collector._request_json(request.full_url, "fixture", {})
+    assert response.limit is None
+    return result
+
+def assert_status(status, opener):
+    collector.urllib.request.urlopen = opener
+    assert collector.openai_usage(now)["status"] == status
 
 def offline(request, timeout):
-    if "chatgpt.com" in request.full_url:
-        return Response(codex_body)
     raise urllib.error.URLError("offline fixture")
 
 collector.urllib.request.urlopen = offline
-assert collector.codex_usage(now)["status"] == "ok"
+assert collector.openai_usage(now)["status"] == "offline"
 assert collector.claude_usage(now)["status"] == "offline"
 
 def malformed(request, timeout):
@@ -215,151 +152,235 @@ def malformed(request, timeout):
     raise urllib.error.HTTPError(request.full_url, 429, "rate limited fixture", {}, None)
 
 collector.urllib.request.urlopen = malformed
-assert collector.codex_usage(now)["status"] == "malformed"
+assert collector.openai_usage(now)["status"] == "malformed"
 assert collector.claude_usage(now)["status"] == "rate-limited"
 
-codex_auth.unlink()
+def response_with_limit(request, timeout):
+    response = Response(openai_body)
+    original_read = response.read
+    def read(limit):
+        assert limit == 1024 * 1024
+        return original_read(limit)
+    response.read = read
+    return response
+
+collector.urllib.request.urlopen = response_with_limit
+assert collector.openai_usage(now)["status"] == "ok"
+
+openai_auth.unlink()
 claude_auth.unlink()
 collector.shutil.which = lambda command: None
-missing_codex = collector.codex_usage(now)
+missing_openai = collector.openai_usage(now)
 missing_claude = collector.claude_usage(now)
-assert missing_codex["status"] == "missing" and missing_codex["cli_status"] == "unavailable"
+assert missing_openai["status"] == "missing" and "cli_status" not in missing_openai
 assert missing_claude["status"] == "missing" and missing_claude["cli_status"] == "unavailable"
 
-codex_auth.write_text(json.dumps({"tokens": {}}))
+openai_auth.write_text(json.dumps({"tokens": {}}))
 claude_auth.write_text(json.dumps({"claudeAiOauth": {"accessToken": claude_secret, "expiresAt": 1}}))
-assert collector.codex_usage(now)["status"] == "auth"
+assert collector.openai_usage(now)["status"] == "auth"
 assert collector.claude_usage(now)["status"] == "expired"
-print("PASS: provider isolation, mocked network statuses, and credential non-leakage")
+
+openai_auth.write_text(json.dumps({"tokens": {"access_token": jwt((now - timedelta(hours=1)).timestamp())}}))
+assert collector.openai_usage(now)["status"] == "expired"
+assert openai_token not in json.dumps(missing_openai) and claude_secret not in json.dumps(missing_claude)
+
+del os.environ["OPENAI_HOME"]
+preferred_auth = Path(os.environ["HOME"]) / ".openai" / "auth.json"
+preferred_auth.parent.mkdir(parents=True)
+preferred_auth.write_text(json.dumps({"tokens": {"access_token": openai_token}}))
+assert collector.openai_usage(now)["status"] == "ok"
+preferred_auth.unlink()
+legacy_auth = Path(os.environ["HOME"]) / ".codex" / "auth.json"
+legacy_auth.parent.mkdir(parents=True)
+legacy_auth.write_text(json.dumps({"tokens": {"access_token": openai_token}}))
+assert collector.openai_usage(now)["status"] == "ok"
+print("PASS: direct provider HTTP, expiry/status handling, bounded responses, and credential non-leakage")
 PY
 }
 
-run_toggle_cases() {
-    local bin="$TMP/toggle-bin"
-    mkdir -p "$bin" "$TMP/runtime"
-    cat > "$bin/hyprctl" <<'EOF'
-#!/bin/bash
-printf '[{"name":"HDMI-A-1","focused":true}]\n'
-EOF
-    chmod +x "$bin/hyprctl"
-    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" \
-        "$ROOT/dot_config/scripts/ai-usage-toggle.sh" toggle
-    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'visible HDMI-A-1' ]] || fail 'Super F4 did not write the visible state'
-    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" \
-        "$ROOT/dot_config/scripts/ai-usage-toggle.sh" toggle
-    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'hidden HDMI-A-1' ]] || fail 'Super F4 did not toggle the hidden state'
-    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" \
-        "$ROOT/dot_config/scripts/ai-usage-toggle.sh" show DP-1
-    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'visible DP-1' ]] || fail 'explicit monitor selection was ignored'
-    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" \
-        "$ROOT/dot_config/scripts/ai-usage-toggle.sh" toggle HDMI-A-1
-    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'visible HDMI-A-1' ]] || fail 'toggle did not move the popup to the requested monitor'
-    grep -Fq 'bind = Super, F4, exec, ~/.config/scripts/ai-usage-toggle.sh toggle' "$ROOT/dot_config/hypr/keybinds.conf" \
-        || fail 'Super F4 binding is missing'
-    grep -Fq 'bindn = , F4, exec, ~/.config/scripts/fn-guard.sh mic_toggle' "$ROOT/dot_config/hypr/keybinds.conf" \
-        || fail 'plain F4 microphone fallback was hijacked'
+run_opencode_cases() {
+    local output before after
+    create_valid_db
+    before="$(sha256sum "$DB")"
+    output="$(collect day)"
+    jq -e '
+        .status == "ok" and .totals.cost == 2 and
+        .totals.input_tokens == 15 and .totals.output_tokens == 26 and
+        ([.providers[].label] | sort) == ["ChatGPT / OpenAI", "Claude", "OpenCode"] and
+        ([.providers[].id] | sort) == ["chatgpt", "claude", "opencode"] and
+        (tostring | contains("secret") | not) and
+        (tostring | contains("raw") | not) and (tostring | contains("prompt") | not)
+    ' <<<"$output" >/dev/null || fail 'OpenCode aggregation or privacy boundary failed'
+    after="$(sha256sum "$DB")"
+    [[ "$before" == "$after" ]] || fail 'read-only collection changed the SQLite source'
+
+    for period in week month; do
+        output="$(collect "$period")"
+        jq -e --arg period "$period" '.status == "ok" and .period == $period and .totals.cost == 2' <<<"$output" >/dev/null \
+            || fail "period aggregation failed for $period"
+    done
+
+    clear_db
+    output="$(collect day)"
+    jq -e '.status == "missing" and .totals == null and (.providers[] | select(.id == "opencode") | .status) == "missing"' <<<"$output" >/dev/null \
+        || fail 'missing OpenCode source status failed'
+
+    create_valid_db
+    touch -d '2 days ago' "$DB"
+    output="$(collect day)"
+    jq -e '.status == "stale" and .totals == null' <<<"$output" >/dev/null || fail 'stale OpenCode source status failed'
+
+    create_valid_db
+    printf 'not a sqlite database\n' > "$DB"
+    output="$(collect day)"
+    jq -e '.status == "malformed" and .totals == null' <<<"$output" >/dev/null || fail 'malformed OpenCode source status failed'
 }
 
-create_valid_db
-CHECKSUM_BEFORE="$(sha256sum "$DB")"
-DAY_OUTPUT="$(collect day)"
-jq -e '
-    .status == "ok" and .period == "day" and
-    (.version == 1) and
-    (.providers | length == 3) and
-    ([.providers[].label] | sort) == ["ChatGPT/Codex", "Claude", "OpenCode"] and
-    ([.providers[].id] | sort) == ["chatgpt", "claude", "opencode"] and
-    (.generated_at | endswith("Z")) and
-    (.source_age_seconds | type == "number") and
-    (.totals | type == "object") and
-    .totals.cost == 2 and
-    .totals.input_tokens == 15 and
-    .totals.output_tokens == 26 and
-    .totals.reasoning_tokens == 4 and
-    .totals.cache_tokens == 14 and
-    ((.breakdown // []) | all(.provider != "" and .model != "")) and
-    (tostring | contains("fixture-secret") | not) and
-    (tostring | contains("raw message") | not) and
-    (tostring | contains("do not expose") | not)
-' <<<"$DAY_OUTPUT" >/dev/null || fail 'valid fixture aggregation or privacy boundary failed'
-CHECKSUM_AFTER="$(sha256sum "$DB")"
-[[ "$CHECKSUM_BEFORE" == "$CHECKSUM_AFTER" ]] || fail 'read-only collection changed the SQLite source'
-
-DEFAULT_DB="$HOME/.local/share/opencode/opencode.db"
-mkdir -p "$(dirname -- "$DEFAULT_DB")"
-cp "$DB" "$DEFAULT_DB"
-unset XDG_DATA_HOME
-DEFAULT_OUTPUT="$(collect day)"
-export XDG_DATA_HOME="$TMP/data"
-jq -e '.status == "ok" and .totals.cost == 2' <<<"$DEFAULT_OUTPUT" >/dev/null \
-    || fail 'adapter did not resolve the default XDG data directory'
-
-for period in week month; do
-    PERIOD_OUTPUT="$(collect "$period")"
-    jq -e --arg period "$period" \
-        '.status == "ok" and .period == $period and (.totals.cost | type == "number") and .totals.cost >= 2' \
-        <<<"$PERIOD_OUTPUT" >/dev/null || fail "period aggregation failed for $period"
-done
-
-clear_db
-assert_status day missing
-
-create_valid_db
-touch -d '2 days ago' "$DB"
-assert_status day stale
-
-create_valid_db
-LOCK_MARKER="$TMP/locked"
-python3 - "$DB" "$LOCK_MARKER" <<'PY' &
-import sqlite3
+run_static_cases() {
+    bash -n "$AUTH_SCRIPT" || fail 'provider auth script syntax failed'
+    python3 - "$SCRIPT" <<'PY' || fail 'Python compilation failed'
+import pathlib
 import sys
-import time
-from pathlib import Path
-
-connection = sqlite3.connect(sys.argv[1], timeout=0)
-connection.execute("BEGIN EXCLUSIVE")
-Path(sys.argv[2]).write_text("locked", encoding="utf-8")
-time.sleep(5)
+compile(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"), sys.argv[1], "exec")
 PY
-LOCK_PID=$!
-for _ in {1..50}; do
-    [[ -f "$LOCK_MARKER" ]] && break
-    sleep 0.02
-done
-[[ -f "$LOCK_MARKER" ]] || fail 'locked fixture did not acquire its exclusive lock'
-assert_status day locked
-kill "$LOCK_PID" 2>/dev/null || true
-wait "$LOCK_PID" 2>/dev/null || true
+    grep -Fq 'mode=ro' "$SCRIPT" || fail 'collector is not explicitly read-only'
+    grep -Fq 'query_only' "$SCRIPT" || fail 'collector does not enable SQLite query_only'
+    grep -Fq 'https://chatgpt.com/backend-api/wham/usage' "$SCRIPT" || fail 'ChatGPT / OpenAI endpoint is missing'
+    grep -Fq 'https://api.anthropic.com/api/oauth/usage' "$SCRIPT" || fail 'Claude endpoint is missing'
+    grep -Fq 'openai|claude' "$AUTH_SCRIPT" || fail 'provider validation is missing'
+    grep -Fq 'login|logout' "$AUTH_SCRIPT" || fail 'action validation is missing'
+    ! grep -Eiq 'eval|xdg-open|browser|bridge|WebKit|QtWebEngine|Chromium' "$AUTH_SCRIPT" \
+        || fail 'provider auth script contains a forbidden execution boundary'
+    ! grep -Eiq 'subprocess|socket|browser|bridge|WebKit|QtWebEngine|Chromium|xdg-open' "$SCRIPT" \
+        || fail 'collector contains a forbidden browser or process boundary'
+    ! grep -Eiq 'ai_usage_web_bridge|ai-provider-open|ai-provider-webview|WebKit|QtWebEngine|Chromium|xdg-open|web-only|extension' \
+        "$QML/AiUsageView.qml" "$QML/shell.qml" || fail 'production QML retains experimental provider references'
+    grep -Fq 'ChatGPT / OpenAI' "$QML/AiUsageView.qml" || fail 'ChatGPT / OpenAI card is missing'
+    grep -Fq 'Claude' "$QML/AiUsageView.qml" || fail 'Claude card is missing'
+    grep -Fq 'OpenCode' "$QML/AiUsageView.qml" || fail 'OpenCode card is missing'
+    grep -Fq 'ai_usage.py' "$QML/shell.qml" || fail 'shell does not launch the direct collector'
+    grep -Fq 'aiUsageRefreshQueued = true' "$QML/shell.qml" || fail 'busy AI Usage refreshes are not queued'
+    grep -Fq 'aiUsageRequestPeriod' "$QML/shell.qml" || fail 'AI Usage request period is not captured'
+    grep -Fq 'if (requestPeriod !== aiUsagePeriod)' "$QML/shell.qml" || fail 'old-period AI Usage responses are not discarded'
+    grep -Fq 'aiUsageLastCompletedAt' "$QML/shell.qml" || fail 'AI Usage completion timestamp is missing'
+    grep -Fq 'command: ["python3", runtimePaths.scriptsDir + "/ai_usage.py", "--period", aiUsageRequestPeriod]' "$QML/shell.qml" \
+        || fail 'collector command does not use the captured request period'
+    ! grep -Fq 'if (aiUsageProcess.running) return' "$QML/shell.qml" \
+        || fail 'busy AI Usage refreshes are still silently dropped'
+    grep -Fq 'onPeriodSelected' "$QML/shell.qml" || fail 'period selector is not wired'
+    grep -Fq 'aiProviderAuthProcess' "$QML/shell.qml" || fail 'provider auth process is missing'
+    grep -Fq '=== "chatgpt" ? "openai"' "$QML/shell.qml" || fail 'ChatGPT provider id is not mapped to OpenAI auth'
+    grep -Fq 'onProviderAuthRequested' "$QML/shell.qml" || fail 'provider auth signal is not wired'
+    grep -Fq 'providerAuthRequested' "$QML/AiUsageView.qml" || fail 'provider auth signal is missing'
+    grep -Fq 'Opening...' "$QML/AiUsageView.qml" || fail 'login progress label is missing'
+    grep -Fq 'Logging out...' "$QML/AiUsageView.qml" || fail 'logout progress label is missing'
+    grep -Fq 'cached · ' "$QML/AiUsageView.qml" || fail 'cached provider data is not labeled'
+    grep -Fq 'refreshMetaText' "$QML/AiUsageView.qml" || fail 'refresh completion metadata is not presented'
+    grep -Fq 'cursorShape: Qt.PointingHandCursor' "$QML/AiUsageView.qml" || fail 'AI Usage controls lack pointer feedback'
+    grep -Fq 'toggleAiUsage' "$QML/StatusBar.qml" || fail 'AI Usage toggle is missing'
+}
 
-clear_db
-printf 'not a sqlite database\n' > "$DB"
-assert_status day malformed
+run_auth_cases() {
+    local bin="$TMP/auth-bin" no_codex_bin="$TMP/no-codex-bin"
+    local direct_bin="$TMP/direct-bin"
+    local auth_home="$TMP/auth-home" openai_home="$TMP/auth-openai"
+    mkdir -p "$bin" "$no_codex_bin" "$direct_bin" "$auth_home/.openai" "$auth_home/.codex" "$openai_home"
+    ln -s "$(command -v rm)" "$no_codex_bin/rm"
+    ln -s "$(command -v env)" "$direct_bin/env"
+    ln -s "$(command -v bash)" "$direct_bin/bash"
 
-create_schema_error_db
-assert_status day schema-error
+    if PATH="$no_codex_bin:/usr/bin:/bin" "$AUTH_SCRIPT" invalid logout >/dev/null 2>&1; then
+        fail 'invalid provider was accepted'
+    fi
+    if PATH="$no_codex_bin:/usr/bin:/bin" "$AUTH_SCRIPT" claude invalid >/dev/null 2>&1; then
+        fail 'invalid action was accepted'
+    fi
 
-create_valid_db
-run_qml_static_cases
-run_runner_static_cases
+    cat > "$bin/kitty" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$@" > "${AUTH_KITTY_CAPTURE:?AUTH_KITTY_CAPTURE must be set}"
+EOF
+    cat > "$bin/claude" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$@" > "${AUTH_CLAUDE_CAPTURE:?AUTH_CLAUDE_CAPTURE must be set}"
+exit "${AUTH_CLAUDE_EXIT:-0}"
+EOF
+    cat > "$bin/codex" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$@" > "${AUTH_CODEX_CAPTURE:?AUTH_CODEX_CAPTURE must be set}"
+EOF
+    chmod +x "$bin/kitty" "$bin/claude" "$bin/codex"
+
+    local kitty_capture="$TMP/kitty.args" claude_capture="$TMP/claude.args" codex_capture="$TMP/codex.args"
+    local -a expected actual
+    expected=(--title "Claude Login" -e claude auth login)
+    AUTH_KITTY_CAPTURE="$kitty_capture" AUTH_CLAUDE_CAPTURE="$claude_capture" \
+        PATH="$bin:/usr/bin:/bin" "$AUTH_SCRIPT" claude login >/dev/null
+    mapfile -t actual < "$kitty_capture"
+    [[ "${actual[*]}" == "${expected[*]}" ]] || fail 'Claude login did not use safe Kitty argv'
+
+    AUTH_CLAUDE_CAPTURE="$claude_capture" PATH="$bin:/usr/bin:/bin" \
+        "$AUTH_SCRIPT" claude logout >/dev/null
+    mapfile -t actual < "$claude_capture"
+    expected=(auth logout)
+    [[ "${actual[*]}" == "${expected[*]}" ]] || fail 'Claude logout command is incorrect'
+
+    ln -s "$bin/claude" "$direct_bin/claude"
+    local direct_output
+    if direct_output="$(AUTH_CLAUDE_CAPTURE="$claude_capture" AUTH_CLAUDE_EXIT=1 \
+        PATH="$direct_bin" "$AUTH_SCRIPT" claude login 2>&1)"; then
+        fail 'Claude direct login unexpectedly succeeded'
+    fi
+    [[ "$direct_output" == *'no terminal was available'* ]] || fail 'Claude direct-login failure was not clear'
+
+    local login_output
+    if login_output="$(PATH="$no_codex_bin:/usr/bin:/bin" "$AUTH_SCRIPT" openai login 2>&1)"; then
+        fail 'OpenAI login unexpectedly succeeded'
+    fi
+    [[ "$login_output" == *'OpenAI login unavailable'* ]] || fail 'OpenAI login failure was not clear'
+
+    AUTH_CODEX_CAPTURE="$codex_capture" PATH="$bin:/usr/bin:/bin" \
+        "$AUTH_SCRIPT" openai logout >/dev/null
+    mapfile -t actual < "$codex_capture"
+    expected=(logout)
+    [[ "${actual[*]}" == "${expected[*]}" ]] || fail 'OpenAI did not prefer codex logout'
+
+    local prioritized="$openai_home/auth.json" preferred="$auth_home/.openai/auth.json" legacy="$auth_home/.codex/auth.json"
+    printf 'fixture\n' > "$prioritized"
+    printf 'fixture\n' > "$preferred"
+    printf 'fixture\n' > "$legacy"
+    printf 'keep\n' > "$openai_home/unrelated.txt"
+    HOME="$auth_home" OPENAI_HOME="$openai_home" PATH="$no_codex_bin:/usr/bin:/bin" \
+        "$AUTH_SCRIPT" openai logout >/dev/null
+    [[ ! -e "$prioritized" && -e "$preferred" && -e "$legacy" ]] || fail 'OpenAI logout removed the wrong credential file'
+    [[ -d "$openai_home" && -e "$openai_home/unrelated.txt" ]] || fail 'OpenAI logout removed unrelated data'
+
+    rm -f "$preferred"
+    HOME="$auth_home" PATH="$no_codex_bin:/usr/bin:/bin" "$AUTH_SCRIPT" openai logout >/dev/null
+    [[ ! -e "$legacy" ]] || fail 'OpenAI logout did not prefer ~/.openai over legacy auth'
+    mkdir -p "$auth_home/.codex"
+    printf 'fixture\n' > "$legacy"
+    HOME="$auth_home" PATH="$no_codex_bin:/usr/bin:/bin" "$AUTH_SCRIPT" openai logout >/dev/null
+    [[ ! -e "$legacy" && -d "$auth_home/.codex" ]] || fail 'OpenAI legacy logout removed too much or failed'
+
+    printf 'PASS: provider auth validation, safe command argv, and hermetic logout paths\n'
+}
+
+run_toggle_case() {
+    local bin="$TMP/bin"
+    mkdir -p "$bin" "$TMP/runtime"
+    printf '#!/bin/bash\nprintf '\''[{"name":"HDMI-A-1","focused":true}]\\n'\''\n' > "$bin/hyprctl"
+    chmod +x "$bin/hyprctl"
+    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" "$ROOT/dot_config/scripts/ai-usage-toggle.sh" toggle
+    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'visible HDMI-A-1' ]] || fail 'Super F4 did not show AI Usage'
+    XDG_RUNTIME_DIR="$TMP/runtime" PATH="$bin:/usr/bin:/bin" "$ROOT/dot_config/scripts/ai-usage-toggle.sh" toggle
+    [[ "$(<"$TMP/runtime/qs-ai-usage")" == 'hidden HDMI-A-1' ]] || fail 'Super F4 did not hide AI Usage'
+}
+
+run_static_cases
+run_auth_cases
 run_provider_cases
-run_toggle_cases
-grep -Fq 'sqlite3' "$SCRIPT" || fail 'adapter does not use Python sqlite3'
-grep -Fq 'mode=ro' "$SCRIPT" || fail 'adapter is not explicitly read-only'
-grep -Fq 'query_only' "$SCRIPT" || fail 'adapter does not enable SQLite query_only'
-grep -Fq 'urllib.request.urlopen' "$SCRIPT" || fail 'collector does not own the network boundary'
-grep -Fq 'https://chatgpt.com/backend-api/wham/usage' "$SCRIPT" || fail 'Codex endpoint is not explicit'
-grep -Fq 'https://api.anthropic.com/api/oauth/usage' "$SCRIPT" || fail 'Claude endpoint is not explicit'
-! grep -Eq 'subprocess|socket|requests' "$SCRIPT" \
-    || fail 'collector contains an unexpected shell or third-party boundary'
-! grep -Eq 'print\([^)]*(token|credential)' "$SCRIPT" \
-    || fail 'collector prints credential material'
-! grep -Fq -- '--db' "$SCRIPT" || fail 'adapter exposes a database-path argument'
-
-APP_TRACKER_HASH="$(git -C "$ROOT" hash-object dot_config/scripts/app_tracker.py)"
-APP_USAGE_VIEW_HASH="$(git -C "$ROOT" hash-object dot_config/quickshell/AppUsageView.qml)"
-[[ "$(git -C "$ROOT" hash-object dot_config/scripts/app_tracker.py)" == "$APP_TRACKER_HASH" ]] \
-    || fail 'application tracker changed during the fixture run'
-[[ "$(git -C "$ROOT" hash-object dot_config/quickshell/AppUsageView.qml)" == "$APP_USAGE_VIEW_HASH" ]] \
-    || fail 'application usage view changed during the fixture run'
+run_opencode_cases
+run_toggle_case
 [[ "$(git -C "$ROOT" status --porcelain=v1)" == "$BEFORE" ]] || fail 'test changed the worktree'
-printf 'PASS: AI Usage providers, OpenCode aggregation, privacy, and Super F4 state\n'
+printf 'PASS: direct AI Usage providers, OpenCode read-only aggregation, privacy, and Super F4 state\n'

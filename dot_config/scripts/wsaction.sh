@@ -7,15 +7,31 @@
 #   wsaction.sh workspace next       → siguiente WS dentro del grupo
 #   wsaction.sh movetoworkspace 5    → mueve ventana al WS 5 o 15
 
-DISPATCHER="$1"
-TARGET="$2"
+set -euo pipefail
+
+DISPATCHER="${1:-}"
+TARGET="${2:-}"
 MAX_PER_GROUP=7
 
-# Get current workspace and calculate group
-ACTIVE_WS=$(hyprctl activeworkspace -j | jq -r '.id')
-GROUP=$(( (ACTIVE_WS - 1) / 10 * 10 ))
-GROUP_MIN=$(( GROUP + 1 ))
-GROUP_MAX=$(( GROUP + MAX_PER_GROUP ))
+# Resolve the group from the focused monitor, not from the global workspace id.
+ACTIVE_WORKSPACE=$(hyprctl activeworkspace -j)
+FOCUSED_MONITOR=$(jq -r '.monitor // empty' <<< "$ACTIVE_WORKSPACE")
+ACTIVE_WS=$(jq -r '.id // empty' <<< "$ACTIVE_WORKSPACE")
+case "$FOCUSED_MONITOR" in
+    eDP-1) GROUP_MIN=1 ;;
+    HDMI-A-1) GROUP_MIN=11 ;;
+    *)
+        printf 'Unsupported focused monitor workspace group: %s\n' "$FOCUSED_MONITOR" >&2
+        exit 1
+        ;;
+esac
+GROUP_MAX=$(( GROUP_MIN + MAX_PER_GROUP - 1 ))
+
+[[ "$ACTIVE_WS" =~ ^[0-9]+$ ]] || { printf 'Invalid active workspace id: %s\n' "$ACTIVE_WS" >&2; exit 1; }
+[[ "$ACTIVE_WS" -ge "$GROUP_MIN" && "$ACTIVE_WS" -le "$GROUP_MAX" ]] || {
+    printf 'Active workspace %s is outside the %s group.\n' "$ACTIVE_WS" "$FOCUSED_MONITOR" >&2
+    exit 1
+}
 
 # Calculate target workspace
 case "$TARGET" in
@@ -28,13 +44,14 @@ case "$TARGET" in
         [ "$REAL_WS" -lt "$GROUP_MIN" ] && REAL_WS="$GROUP_MAX"
         ;;
     *)
-        REAL_WS=$(( GROUP + TARGET ))
+        [[ "$TARGET" =~ ^[1-7]$ ]] || { printf 'Workspace target must be 1-7, prev, or next.\n' >&2; exit 64; }
+        REAL_WS=$(( GROUP_MIN + TARGET - 1 ))
         ;;
 esac
 
 # Dispatch
-if [ "$DISPATCHER" = "workspace" ]; then
-    hyprctl dispatch focusworkspaceoncurrentmonitor "$REAL_WS"
-else
-    hyprctl dispatch movetoworkspacesilent "$REAL_WS"
-fi
+case "$DISPATCHER" in
+    workspace) hyprctl dispatch focusworkspaceoncurrentmonitor "$REAL_WS" ;;
+    movetoworkspace) hyprctl dispatch movetoworkspacesilent "$REAL_WS" ;;
+    *) printf 'Usage: %s {workspace|movetoworkspace} {1-7|prev|next}\n' "$0" >&2; exit 64 ;;
+esac

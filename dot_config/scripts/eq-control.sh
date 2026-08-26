@@ -6,7 +6,11 @@ ACTION="$1"
 VAL1="$2"   # Band index (0-9) OR Preset name
 VAL2="$3"   # Gain in dB (-12 to 12)
 
-EQ_STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/qs-eq"
+SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
+[[ "$SCRIPT_DIR" == "${BASH_SOURCE[0]}" ]] && SCRIPT_DIR="."
+source "$SCRIPT_DIR/runtime-paths.sh"
+runtime_paths_load
+EQ_STATE_DIR="$RUNTIME_PATHS_RUNTIME_DIR/qs-eq"
 mkdir -p "$EQ_STATE_DIR"
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────

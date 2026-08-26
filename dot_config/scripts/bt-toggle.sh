@@ -2,7 +2,11 @@
 # bt-toggle.sh — Toggle Bluetooth Panel UI
 # Usage: bt-toggle.sh toggle
 
-RTDIR="${XDG_RUNTIME_DIR:-/tmp}"
+SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
+[[ "$SCRIPT_DIR" == "${BASH_SOURCE[0]}" ]] && SCRIPT_DIR="."
+source "$SCRIPT_DIR/runtime-paths.sh"
+runtime_paths_load
+RTDIR="$RUNTIME_PATHS_RUNTIME_DIR"
 FILE="$RTDIR/qs-bt-panel"
 
 case "$1" in
