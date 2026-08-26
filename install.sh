@@ -39,6 +39,10 @@ terminal_state_file() {
     printf '%s/terminal-dots.conf\n' "$(terminal_state_dir)"
 }
 
+terminal_shell_state_file() {
+    printf '%s/terminal-shell.conf\n' "$(terminal_state_dir)"
+}
+
 terminal_herdr_config_file() {
     printf '%s/herdr/config.toml\n' "$(terminal_config_root)"
 }
@@ -89,6 +93,34 @@ write_terminal_state() {
     chmod 600 "$file"
 }
 
+write_terminal_shell_state() {
+    local value="$1"
+    local directory="$(terminal_state_dir)"
+    local file="$(terminal_shell_state_file)"
+    local temporary old_umask
+
+    case "$value" in
+        none|fish|zsh|nushell) ;;
+        *) fail "Invalid terminal shell state: $value"; return 1 ;;
+    esac
+
+    mkdir -p "$directory" || return 1
+    chmod 700 "$directory" || return 1
+    old_umask="$(umask)"
+    umask 077
+    if ! temporary="$(mktemp "$directory/.terminal-shell.conf.XXXXXX")"; then
+        umask "$old_umask"
+        return 1
+    fi
+    if ! printf '%s\n' "$value" > "$temporary" || ! chmod 600 "$temporary" || ! mv -f "$temporary" "$file"; then
+        rm -f -- "$temporary"
+        umask "$old_umask"
+        return 1
+    fi
+    umask "$old_umask"
+    chmod 600 "$file"
+}
+
 read_terminal_state() {
     local file="$(terminal_state_file)"
     local -a lines=()
@@ -111,12 +143,69 @@ read_terminal_state() {
     esac
 }
 
+read_terminal_shell_state() {
+    local file="$(terminal_shell_state_file)" value
+    local -a lines=()
+    [[ -f "$file" && -r "$file" ]] || { printf 'none\n'; return 0; }
+    mapfile -t lines < "$file" || { printf 'none\n'; return 0; }
+    (( ${#lines[@]} == 1 )) || { printf 'none\n'; return 0; }
+    value="${lines[0]}"
+    case "$value" in
+        none|fish|zsh|nushell) printf '%s\n' "$value" ;;
+        *) printf 'none\n' ;;
+    esac
+}
+
+terminal_shell_executable() {
+    case "$1" in
+        fish) printf 'fish\n' ;;
+        zsh) printf 'zsh\n' ;;
+        nushell) printf 'nu\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+terminal_shell_config_file() {
+    case "$1" in
+        fish) printf '%s\n' "$HOME/.config/fish/config.fish" ;;
+        zsh) printf '%s\n' "$HOME/.zshrc" ;;
+        nushell) printf '%s\n' "$HOME/.config/nushell/config.nu" ;;
+        *) return 1 ;;
+    esac
+}
+
+configure_kitty_shell() {
+    local shell="$1" executable config temporary
+    executable="$(terminal_shell_executable "$shell")" || return 1
+    config="$HOME/.config/kitty/kitty.conf"
+    [[ -f "$config" ]] || return 1
+    temporary="$(mktemp "${config}.XXXXXX")" || return 1
+    if ! awk -v executable="$executable" '
+        /^[[:space:]]*shell[[:space:]]+/ {
+            if (!replaced) { print "shell " executable; replaced = 1 }
+            next
+        }
+        { print }
+        END { if (!replaced) print "\n# Managed by Gentleman.Dots selection\nshell " executable }
+    ' "$config" > "$temporary"; then
+        rm -f -- "$temporary"
+        return 1
+    fi
+    chmod 600 "$temporary" && mv -f "$temporary" "$config" || { rm -f -- "$temporary"; return 1; }
+}
+
+kitty_effective_shell() {
+    local config="${1:-$HOME/.config/kitty/kitty.conf}"
+    [[ -r "$config" ]] || return 1
+    awk '/^[[:space:]]*shell[[:space:]]+/ { value=$2 } END { if (value) print value; else exit 1 }' "$config"
+}
+
 normalize_terminal_dots_answer() {
     local answer="${1,,}"
     answer="${answer#"${answer%%[![:space:]]*}"}"
     answer="${answer%"${answer##*[![:space:]]}"}"
     case "$answer" in
-        ''|n|no|0|false|off) printf 'none\n' ;;
+        ''|n|no|0|false|off|2) printf 'none\n' ;;
         y|yes|s|si|1|true|on) printf 'enabled\n' ;;
         *) return 1 ;;
     esac
@@ -150,36 +239,39 @@ normalize_terminal_shell_answer() {
 prompt_terminal_shell() {
     local answer normalized
     while true; do
-        read -r -p "  Shell (Fish/Zsh/Nushell, Zsh por defecto): " answer || answer=''
+        printf '  1) Fish\n  2) Zsh\n  3) Nushell\n' >&2
+        read -r -p "  Opción (1-3, Zsh por defecto): " answer || answer=''
         if normalized="$(normalize_terminal_shell_answer "$answer")"; then
             printf '%s\n' "$normalized"
             return 0
         fi
-        warn "Invalid shell. Use Fish, Zsh, or Nushell." >&2
+        warn "Invalid shell. Use a number between 1 and 3." >&2
     done
 }
 
 prompt_terminal_dots() {
     local answer normalized
     while true; do
-        read -r -p "  ¿Integrar los Terminal DOTS? (s/N): " answer || answer=''
+        printf '  1) Sí\n  2) No\n' >&2
+        read -r -p "  Opción (1-2, No por defecto): " answer || answer=''
         if normalized="$(normalize_terminal_dots_answer "$answer")"; then
             printf '%s\n' "$normalized"
             return 0
         fi
-        warn "Respuesta inválida. Usa s/yes o n/no." >&2
+        warn "Respuesta inválida. Usa un número entre 1 y 2." >&2
     done
 }
 
 prompt_terminal_runtime() {
     local answer normalized
     while true; do
-        read -r -p "  WM/session (TMUX/Zellij/Herdr/None, Herdr por defecto): " answer || answer=''
+        printf '  1) Herdr\n  2) TMUX\n  3) Zellij\n  4) None\n' >&2
+        read -r -p "  Opción (1-4, Herdr por defecto): " answer || answer=''
         if normalized="$(normalize_terminal_runtime_answer "$answer")"; then
             printf '%s\n' "$normalized"
             return 0
         fi
-        warn "Invalid WM/session. Use TMUX, Zellij, Herdr, or None." >&2
+        warn "Invalid WM/session. Use a number between 1 and 4." >&2
     done
 }
 
@@ -221,18 +313,18 @@ configure_terminal_dots() {
     local selection shell
 
     selection="$(prompt_terminal_dots)"
-    if ! write_terminal_state none; then
+    if ! write_terminal_state none || ! write_terminal_shell_state none; then
         fail "Unable to disable terminal DOTS safely."
         return 1
     fi
     if [[ "$selection" == none ]]; then
-        info "Terminal DOTS disabled; existing packages and user files were preserved."
+        info "Terminal DOTS disabled; no shell/session selected and existing files were preserved."
         return 0
     fi
 
     shell="$(prompt_terminal_shell)"
     selection="$(prompt_terminal_runtime)"
-    if ! write_terminal_state none; then
+    if ! write_terminal_state none || ! write_terminal_shell_state none; then
         fail "Unable to reset terminal DOTS before installation."
         return 1
     fi
@@ -241,23 +333,78 @@ configure_terminal_dots() {
         *)
             fail "Invalid terminal WM/session selection."
             write_terminal_state none || true
+            write_terminal_shell_state none || true
             return 1
             ;;
     esac
     if ! install_gentleman_dots "$shell" "$selection"; then
         write_terminal_state none || true
+        write_terminal_shell_state none || true
         return 1
     fi
     if [[ "$selection" == herdr ]] && ! preserve_herdr_config; then
         write_terminal_state none || true
+        write_terminal_shell_state none || true
         return 1
     fi
-    if ! write_terminal_state "$selection"; then
+    if ! write_terminal_state "$selection" || ! write_terminal_shell_state "$shell"; then
         write_terminal_state none || true
+        write_terminal_shell_state none || true
         fail "Unable to activate terminal DOTS safely."
         return 1
     fi
-    ok "Terminal DOTS configured: $selection"
+    ok "Terminal DOTS configured: $shell / $selection"
+}
+
+validate_terminal_selection() {
+    local selected_shell selected_session shell_executable shell_config session_label session_command effective_shell
+
+    selected_shell="$(read_terminal_shell_state)"
+    selected_session="$(read_terminal_state)"
+    if [[ "$selected_shell" == none ]]; then
+        info "Selected shell: None; config: None"
+        info "Selected session: None (no shell/session selected)"
+        return 0
+    fi
+
+    shell_executable="$(terminal_shell_executable "$selected_shell")"
+    shell_config="$(terminal_shell_config_file "$selected_shell")"
+    info "Selected shell: $selected_shell ($shell_executable); config: $shell_config"
+    if [[ -f "$shell_config" ]]; then
+        ok "$(basename "$shell_config") deployed"
+    else
+        fail "$(basename "$shell_config") NOT found"
+        all_ok=false
+    fi
+    if command -v "$shell_executable" &>/dev/null; then
+        ok "$shell_executable available"
+    else
+        fail "$shell_executable NOT available"
+        all_ok=false
+    fi
+
+    case "$selected_session" in
+        herdr) session_label="Herdr"; session_command="$HOME/.local/bin/herdr" ;;
+        tmux) session_label="TMUX"; session_command="$(command -v tmux 2>/dev/null || true)" ;;
+        zellij) session_label="Zellij"; session_command="$(command -v zellij 2>/dev/null || true)" ;;
+        *) selected_session=none; session_label="None"; session_command='' ;;
+    esac
+    if [[ "$selected_session" == none ]]; then
+        info "Selected session: None"
+    elif [[ -x "$session_command" ]]; then
+        ok "Selected session: $session_label (available)"
+    else
+        fail "Selected session: $session_label (unavailable)"
+        all_ok=false
+    fi
+
+    effective_shell="$(kitty_effective_shell 2>/dev/null || true)"
+    if [[ "$effective_shell" == "$shell_executable" ]]; then
+        ok "Kitty effective shell matches selection: $effective_shell"
+    else
+        fail "Kitty effective shell '$effective_shell' does not match selection '$shell_executable'"
+        all_ok=false
+    fi
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -416,6 +563,17 @@ chmod +x "$HOME/.config/scripts/"* 2>/dev/null || true
 chmod +x "$HOME/.config/hypr/scripts/"* 2>/dev/null || true
 
 ok "Configuraciones base desplegadas con éxito."
+
+selected_shell="$(read_terminal_shell_state)"
+if [[ "$selected_shell" != none ]]; then
+    if ! configure_kitty_shell "$selected_shell"; then
+        write_terminal_state none || true
+        write_terminal_shell_state none || true
+        warn "Kitty shell configuration failed; terminal DOTS remain disabled."
+    else
+        ok "Kitty configured for $(terminal_shell_executable "$selected_shell")"
+    fi
+fi
 
 # ═══════════════════════════════════════════════════════════════
 #  Instalación de Software
@@ -615,7 +773,7 @@ for app in "${REQUIRED[@]}"; do
 done
 
 # Verificar que los archivos de configuración existen
-for cfg in ~/.config/quickshell/shell.qml ~/.config/hypr/hyprland.conf ~/.zshrc; do
+for cfg in ~/.config/quickshell/shell.qml ~/.config/hypr/hyprland.conf; do
     if [ -f "$cfg" ]; then
         ok "$(basename "$cfg") desplegado"
     else
@@ -623,6 +781,8 @@ for cfg in ~/.config/quickshell/shell.qml ~/.config/hypr/hyprland.conf ~/.zshrc;
         all_ok=false
     fi
 done
+
+validate_terminal_selection
 
 # ═══════════════════════════════════════════════════════════════
 #  Resumen

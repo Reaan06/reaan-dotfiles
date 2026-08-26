@@ -23,8 +23,9 @@ It delegates terminal setup to the official
 Linux installer with Kitty fixed as the terminal emulator. Upstream installs the
 selected shell and session dots, sets the default shell, and safely adds the
 selected session auto-start behavior to Fish, Zsh, or Nushell. This repository
-does not deploy `dot_zshrc` or add a second startup hook. Hyprland continues to
-use `$terminal = kitty`.
+does not deploy `dot_zshrc` or add a second startup hook. After the local Kitty
+config is deployed, the installer patches its effective `shell` directive to
+the selected shell. Hyprland continues to use `$terminal = kitty`.
 
 The official binary is downloaded completely to a private mode-0700 temporary
 file and executed from a private temporary directory with
@@ -35,11 +36,17 @@ existing files through the upstream backup mechanism.
 
 The state file contains exactly one of `none`, `tmux`, `zellij`, or `herdr` at
 `$XDG_CONFIG_HOME/reaan/terminal-dots.conf` (or `~/.config/reaan/...`). The
-installer writes `none` before an attempt and only activates the selected value
-after upstream succeeds. Failure is fail-closed: there is no shell/session
-fallback, user configuration is not deleted, and the selected state returns to
-`none`. The vendored Herdr config is copied only when upstream did not create a
-user config.
+installer also stores `none`, `fish`, `zsh`, or `nushell` atomically at
+`$XDG_CONFIG_HOME/reaan/terminal-shell.conf`. Both states are reset before an
+attempt and activated only after upstream succeeds. Failure is fail-closed:
+there is no shell/session fallback, user configuration is not deleted, and both
+states return to `none`. If Terminal DOTS are declined, no shell override is
+written and no shell/session is selected. The vendored Herdr config is copied
+only when upstream did not create a user config.
+
+Validation reports the selected shell and its deployed config path, the selected
+session and whether it is available, and whether Kitty's effective shell
+matches the selection.
 
 The standalone `dot_config/scripts/terminal-session.sh` launcher remains an
 explicit, interactive-TTY-only escape hatch. It honors nesting guards for

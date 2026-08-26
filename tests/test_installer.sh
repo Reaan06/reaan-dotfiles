@@ -10,6 +10,7 @@ test_fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 assert_file() { [[ -f "$1" ]] || test_fail "missing file: $1"; }
 assert_content() { printf '%s' "$2" | cmp -s - "$1" || test_fail "unexpected content: $1"; }
 assert_state() { assert_content "$XDG_CONFIG_HOME/reaan/terminal-dots.conf" "$1"$'\n'; }
+assert_shell_state() { assert_content "$XDG_CONFIG_HOME/reaan/terminal-shell.conf" "$1"$'\n'; }
 
 setup() {
     rm -rf "$TMP/home" "$TMP/config" "$TMP/bin"
@@ -41,6 +42,11 @@ printf '\n' >> "${INSTALLER_LOG:?}"
 mkdir -p "$HOME/.gentleman-markers"
 printf '%s\n' "$3" > "$HOME/.gentleman-markers/shell"
 printf '%s\n' "$4" > "$HOME/.gentleman-markers/wm"
+case "$3" in
+    --shell=fish) mkdir -p "$HOME/.config/fish"; : > "$HOME/.config/fish/config.fish" ;;
+    --shell=zsh) : > "$HOME/.zshrc" ;;
+    --shell=nushell) mkdir -p "$HOME/.config/nushell"; : > "$HOME/.config/nushell/config.nu" ;;
+esac
 INSTALLER
 chmod 700 "$output"
 stat -c '%a' "$output" > "${CURL_MODE:?}"
@@ -55,28 +61,54 @@ test_boundaries() {
     grep -Fqx '$terminal = kitty' "$ROOT/dot_config/hypr/hyprland.conf" || test_fail 'Kitty Hyprland binding changed'
     ! grep -Fq 'dot_zshrc' "$ROOT/install.sh" || test_fail 'installer deploys dot_zshrc'
     ! grep -Fq 'oh-my-zsh\|powerlevel10k\|chsh' "$ROOT/install.sh" || test_fail 'obsolete Zsh block remains'
+    grep -Fq 'Opción (1-2, No por defecto)' "$ROOT/install.sh" || test_fail 'Terminal DOTS prompt is not numbered'
+    grep -Fq 'Opción (1-3, Zsh por defecto)' "$ROOT/install.sh" || test_fail 'shell prompt is not numbered'
+    grep -Fq 'Opción (1-4, Herdr por defecto)' "$ROOT/install.sh" || test_fail 'WM prompt is not numbered'
 }
 
 test_normalization_and_decline() {
     setup
+    [[ "$(normalize_terminal_dots_answer '')" == none ]] || test_fail 'Terminal DOTS default lost'
+    [[ "$(normalize_terminal_dots_answer 1)" == enabled ]] || test_fail 'Terminal DOTS yes normalization failed'
+    [[ "$(normalize_terminal_dots_answer 2)" == none ]] || test_fail 'Terminal DOTS no normalization failed'
+    [[ "$(normalize_terminal_dots_answer yes)" == enabled ]] || test_fail 'Terminal DOTS alias lost'
     [[ "$(normalize_terminal_shell_answer '')" == zsh ]] || test_fail 'Zsh default lost'
-    [[ "$(normalize_terminal_shell_answer fish)" == fish ]] || test_fail 'Fish normalization failed'
-    [[ "$(normalize_terminal_shell_answer nushell)" == nushell ]] || test_fail 'Nushell normalization failed'
-    [[ "$(normalize_terminal_runtime_answer zellij)" == zellij ]] || test_fail 'Zellij normalization failed'
-    ! normalize_terminal_shell_answer invalid || test_fail 'invalid shell accepted'
-    ! normalize_terminal_runtime_answer invalid || test_fail 'invalid WM accepted'
+    [[ "$(normalize_terminal_shell_answer 1)" == fish ]] || test_fail 'Fish numeric normalization failed'
+    [[ "$(normalize_terminal_shell_answer 3)" == nushell ]] || test_fail 'Nushell numeric normalization failed'
+    [[ "$(normalize_terminal_shell_answer fish)" == fish ]] || test_fail 'Fish alias lost'
+    [[ "$(normalize_terminal_runtime_answer '')" == herdr ]] || test_fail 'Herdr default lost'
+    [[ "$(normalize_terminal_runtime_answer 1)" == herdr ]] || test_fail 'Herdr numeric normalization failed'
+    [[ "$(normalize_terminal_runtime_answer 3)" == zellij ]] || test_fail 'Zellij numeric normalization failed'
+    [[ "$(normalize_terminal_runtime_answer zellij)" == zellij ]] || test_fail 'Zellij alias lost'
+    ! normalize_terminal_dots_answer 3 || test_fail 'invalid Terminal DOTS choice accepted'
+    ! normalize_terminal_shell_answer 4 || test_fail 'invalid shell choice accepted'
+    ! normalize_terminal_runtime_answer 5 || test_fail 'invalid WM choice accepted'
+    dots_prompt="$(printf '9\n' | prompt_terminal_dots 2>&1)"
+    [[ "$dots_prompt" == *'1) Sí'* && "$dots_prompt" == *'2) No'* && "$dots_prompt" == *'1 y 2'* ]] || test_fail 'Terminal DOTS prompt contract changed'
+    shell_prompt="$(printf '4\n' | prompt_terminal_shell 2>&1)"
+    [[ "$shell_prompt" == *'1) Fish'* && "$shell_prompt" == *'2) Zsh'* && "$shell_prompt" == *'3) Nushell'* && "$shell_prompt" == *'between 1 and 3'* ]] || test_fail 'shell prompt contract changed'
+    runtime_prompt="$(printf '5\n' | prompt_terminal_runtime 2>&1)"
+    [[ "$runtime_prompt" == *'1) Herdr'* && "$runtime_prompt" == *'2) TMUX'* && "$runtime_prompt" == *'3) Zellij'* && "$runtime_prompt" == *'4) None'* && "$runtime_prompt" == *'between 1 and 4'* ]] || test_fail 'WM prompt contract changed'
     printf '\n' | configure_terminal_dots >/dev/null
     assert_state none
+    assert_shell_state none
     [[ ! -s "$CURL_LOG" ]] || test_fail 'decline downloaded Gentleman.Dots'
 }
 
 test_state_and_config_boundaries() {
     setup
     write_terminal_state zellij
+    write_terminal_shell_state fish
     assert_state zellij
+    assert_shell_state fish
     [[ "$(stat -c '%a' "$XDG_CONFIG_HOME/reaan/terminal-dots.conf")" == 600 ]] || test_fail 'state mode is not private'
+    [[ "$(stat -c '%a' "$XDG_CONFIG_HOME/reaan/terminal-shell.conf")" == 600 ]] || test_fail 'shell state mode is not private'
     printf 'zellij\ntmux\n' > "$XDG_CONFIG_HOME/reaan/terminal-dots.conf"
     [[ "$(read_terminal_state)" == none ]] || test_fail 'malformed state was accepted'
+    printf 'invalid\n' > "$XDG_CONFIG_HOME/reaan/terminal-shell.conf"
+    [[ "$(read_terminal_shell_state)" == none ]] || test_fail 'invalid shell state was accepted'
+    printf 'fish\nzsh\n' > "$XDG_CONFIG_HOME/reaan/terminal-shell.conf"
+    [[ "$(read_terminal_shell_state)" == none ]] || test_fail 'malformed shell state was accepted'
     mkdir -p "$TMP/vendor/dot_config/herdr" "$XDG_CONFIG_HOME/herdr"
     printf 'vendor\n' > "$TMP/vendor/dot_config/herdr/config.toml"
     printf 'user\n' > "$XDG_CONFIG_HOME/herdr/config.toml"
@@ -86,8 +118,9 @@ test_state_and_config_boundaries() {
 
 test_official_wrapper() {
     setup; setup_fake_curl
-    printf 'yes\nfish\nzellij\n' | configure_terminal_dots >/dev/null
+    printf '1\n1\n3\n' | configure_terminal_dots >/dev/null
     assert_state zellij
+    assert_shell_state fish
     assert_content "$HOME/.gentleman-markers/shell" '--shell=fish'$'\n'
     assert_content "$HOME/.gentleman-markers/wm" '--wm=zellij'$'\n'
     mapfile -d '' -t args < "$CURL_LOG"
@@ -103,10 +136,41 @@ test_official_wrapper() {
     [[ ! -e "$workdir" ]] || test_fail 'private workdir was not cleaned'
 }
 
+test_kitty_shell_selection() {
+    setup
+    mkdir -p "$HOME/.config/kitty"
+    printf 'font_size 12\nshell_integration enabled\nshell zsh\n' > "$HOME/.config/kitty/kitty.conf"
+    configure_kitty_shell fish
+    assert_content "$HOME/.config/kitty/kitty.conf" $'font_size 12\nshell_integration enabled\nshell fish\n'
+    [[ "$(kitty_effective_shell)" == fish ]] || test_fail 'Kitty did not select Fish'
+
+    printf 'font_size 12\nshell_integration enabled\n' > "$HOME/.config/kitty/kitty.conf"
+    configure_kitty_shell nushell
+    [[ "$(kitty_effective_shell)" == nu ]] || test_fail 'Kitty did not select Nushell'
+    grep -Fqx 'shell nu' "$HOME/.config/kitty/kitty.conf" || test_fail 'Nushell directive missing'
+
+    configure_kitty_shell zsh
+    [[ "$(kitty_effective_shell)" == zsh ]] || test_fail 'Kitty did not select Zsh'
+    grep -Fqx 'shell zsh' "$HOME/.config/kitty/kitty.conf" || test_fail 'Zsh directive missing'
+
+    cat > "$TMP/bin/fish" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod 700 "$TMP/bin/fish"
+    write_terminal_shell_state fish
+    write_terminal_state none
+    configure_kitty_shell fish
+    output="$(all_ok=true; validate_terminal_selection)"
+    [[ "$output" == *'Selected shell: fish (fish)'* && "$output" == *'config.fish'* ]] || test_fail 'dynamic shell validation lost Fish'
+    [[ "$output" == *'Selected session: None'* && "$output" == *'Kitty effective shell matches selection: fish'* ]] || test_fail 'dynamic validation report incomplete'
+}
+
 test_failure_no_fallback() {
     setup; setup_fake_curl; export GENTLEMAN_TEST_FAIL=1
-    if printf 'yes\nzsh\nherdr\n' | configure_terminal_dots >/dev/null 2>&1; then test_fail 'installer failure accepted'; fi
+    if printf '1\n2\n1\n' | configure_terminal_dots >/dev/null 2>&1; then test_fail 'installer failure accepted'; fi
     assert_state none
+    assert_shell_state none
     [[ ! -e "$HOME/.gentleman-markers/wm" ]] || test_fail 'failed install left activation markers'
     grep -Fq -- '--wm=herdr' "$INSTALLER_LOG" || test_fail 'selected WM was not passed'
     ! grep -Fq tmux "$INSTALLER_LOG" || test_fail 'failure fell back to TMUX'
@@ -134,5 +198,6 @@ test_normalization_and_decline
 test_state_and_config_boundaries
 test_official_wrapper
 test_failure_no_fallback
+test_kitty_shell_selection
 test_launcher
 printf 'PASS: official Gentleman.Dots and terminal session contracts\n'
