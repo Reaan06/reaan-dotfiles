@@ -27,9 +27,260 @@ warn()    { echo -e "  ${YELLOW}⚠${NC} $1"; }
 fail()    { echo -e "  ${RED}✗${NC} $1"; }
 die()     { fail "$1"; exit 1; }
 
+terminal_config_root() {
+    printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}"
+}
+
+terminal_state_dir() {
+    printf '%s/reaan\n' "$(terminal_config_root)"
+}
+
+terminal_state_file() {
+    printf '%s/terminal-dots.conf\n' "$(terminal_state_dir)"
+}
+
+terminal_herdr_binary() {
+    printf '%s/.local/bin/herdr\n' "$HOME"
+}
+
+terminal_herdr_config_file() {
+    printf '%s/herdr/config.toml\n' "$(terminal_config_root)"
+}
+
+write_terminal_state() {
+    local value="$1"
+    local directory="$(terminal_state_dir)"
+    local file="$(terminal_state_file)"
+    local temporary old_umask
+
+    case "$value" in
+        none|herdr|tmux) ;;
+        *) fail "Invalid terminal state: $value"; return 1 ;;
+    esac
+
+    mkdir -p "$directory" || return 1
+    chmod 700 "$directory" || return 1
+    old_umask="$(umask)"
+    umask 077
+    if ! temporary="$(mktemp "$directory/.terminal-dots.conf.XXXXXX")"; then
+        umask "$old_umask"
+        return 1
+    fi
+    if ! printf '%s\n' "$value" > "$temporary"; then
+        rm -f -- "$temporary"
+        umask "$old_umask"
+        return 1
+    fi
+    if ! chmod 600 "$temporary"; then
+        rm -f -- "$temporary"
+        umask "$old_umask"
+        return 1
+    fi
+    if ! mv -f "$temporary" "$file"; then
+        rm -f -- "$temporary"
+        umask "$old_umask"
+        return 1
+    fi
+    umask "$old_umask"
+    chmod 600 "$file"
+}
+
+read_terminal_state() {
+    local file="$(terminal_state_file)"
+    local -a lines=()
+
+    if [[ ! -f "$file" || ! -r "$file" ]]; then
+        printf 'none\n'
+        return 0
+    fi
+    mapfile -t lines < "$file" || {
+        printf 'none\n'
+        return 0
+    }
+    if (( ${#lines[@]} != 1 )); then
+        printf 'none\n'
+        return 0
+    fi
+    case "${lines[0]}" in
+        none|herdr|tmux) printf '%s\n' "${lines[0]}" ;;
+        *) printf 'none\n' ;;
+    esac
+}
+
+normalize_terminal_dots_answer() {
+    local answer="${1,,}"
+    answer="${answer#"${answer%%[![:space:]]*}"}"
+    answer="${answer%"${answer##*[![:space:]]}"}"
+    case "$answer" in
+        ''|n|no|0|false|off) printf 'none\n' ;;
+        y|yes|s|si|1|true|on) printf 'enabled\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+normalize_terminal_runtime_answer() {
+    local answer="${1,,}"
+    answer="${answer#"${answer%%[![:space:]]*}"}"
+    answer="${answer%"${answer##*[![:space:]]}"}"
+    case "$answer" in
+        ''|h|herdr|1) printf 'herdr\n' ;;
+        t|tmux|2) printf 'tmux\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+prompt_terminal_dots() {
+    local answer normalized
+    while true; do
+        read -r -p "  ¿Integrar los Terminal DOTS? (s/N): " answer || answer=''
+        if normalized="$(normalize_terminal_dots_answer "$answer")"; then
+            printf '%s\n' "$normalized"
+            return 0
+        fi
+        warn "Respuesta inválida. Usa s/yes o n/no." >&2
+    done
+}
+
+prompt_terminal_runtime() {
+    local answer normalized
+    while true; do
+        read -r -p "  Runtime de terminal (Herdr/TMUX, Herdr por defecto): " answer || answer=''
+        if normalized="$(normalize_terminal_runtime_answer "$answer")"; then
+            printf '%s\n' "$normalized"
+            return 0
+        fi
+        warn "Respuesta inválida. Usa Herdr o TMUX." >&2
+    done
+}
+
+preserve_herdr_config() {
+    local source="$DOTFILES_DIR/dot_config/herdr/config.toml"
+    local destination="$(terminal_herdr_config_file)"
+
+    [[ -f "$source" ]] || return 0
+    [[ -e "$destination" || -L "$destination" ]] && return 0
+    mkdir -p "$(dirname -- "$destination")" || return 1
+    cp -p -- "$source" "$destination"
+}
+
+HERDR_INSTALLER_URL='https://herdr.dev/install.sh'
+
+install_herdr_runtime() {
+    local binary="$(terminal_herdr_binary)"
+    local binary_dir
+
+    if [[ -x "$binary" ]]; then
+        return 0
+    fi
+
+    binary_dir="$(dirname -- "$binary")"
+    if ! mkdir -p "$binary_dir"; then
+        fail "Herdr installation could not create its install directory; runtime remains disabled."
+        return 1
+    fi
+
+    (
+        local temporary=''
+
+        cleanup_herdr_download() {
+            if [[ -n "$temporary" ]]; then
+                rm -f -- "$temporary" || true
+            fi
+        }
+        trap cleanup_herdr_download EXIT
+
+        umask 077
+        if ! temporary="$(mktemp "$binary_dir/.herdr-download.XXXXXX")"; then
+            fail "Herdr installer staging failed; runtime remains disabled."
+            exit 1
+        fi
+        if ! chmod 0700 "$temporary"; then
+            fail "Herdr installer staging failed; runtime remains disabled."
+            exit 1
+        fi
+        if ! curl --fail --location --silent --show-error --output "$temporary" "$HERDR_INSTALLER_URL"; then
+            fail "Herdr download failed; runtime remains disabled."
+            exit 1
+        fi
+        if ! HERDR_INSTALL_DIR="$HOME/.local/bin" "$temporary"; then
+            fail "Herdr official installer failed; runtime remains disabled."
+            exit 1
+        fi
+        if [[ ! -x "$binary" ]]; then
+            fail "Herdr official installer did not provide an executable; runtime remains disabled."
+            exit 1
+        fi
+    )
+}
+
+install_tmux_runtime() {
+    if command -v tmux >/dev/null 2>&1; then
+        return 0
+    fi
+    if ! command -v yay >/dev/null 2>&1; then
+        fail "TMUX installation blocked: yay is unavailable."
+        return 1
+    fi
+    if ! yay -S --needed --noconfirm tmux; then
+        fail "TMUX installation failed; runtime remains disabled."
+        return 1
+    fi
+    if ! command -v tmux >/dev/null 2>&1; then
+        fail "TMUX installation failed: tmux was not found after yay completed."
+        return 1
+    fi
+}
+
+configure_terminal_dots() {
+    local selection
+
+    selection="$(prompt_terminal_dots)"
+    if ! write_terminal_state none; then
+        fail "Unable to disable terminal DOTS safely."
+        return 1
+    fi
+    if [[ "$selection" == none ]]; then
+        info "Terminal DOTS disabled; existing packages and user files were preserved."
+        return 0
+    fi
+
+    selection="$(prompt_terminal_runtime)"
+    if ! write_terminal_state none; then
+        fail "Unable to reset terminal DOTS before installation."
+        return 1
+    fi
+    case "$selection" in
+        herdr)
+            if ! install_herdr_runtime || ! preserve_herdr_config; then
+                write_terminal_state none || true
+                return 1
+            fi
+            ;;
+        tmux)
+            if ! install_tmux_runtime; then
+                write_terminal_state none || true
+                return 1
+            fi
+            ;;
+        *)
+            fail "Invalid terminal runtime selection."
+            write_terminal_state none || true
+            return 1
+            ;;
+    esac
+    if ! write_terminal_state "$selection"; then
+        write_terminal_state none || true
+        fail "Unable to activate terminal DOTS safely."
+        return 1
+    fi
+    ok "Terminal DOTS configured: $selection"
+}
+
 # ═══════════════════════════════════════════════════════════════
 #  Validaciones
 # ═══════════════════════════════════════════════════════════════
+
+main() {
 
 [ -f /etc/arch-release ] || die "Este script es exclusivo para Arch Linux."
 
@@ -73,6 +324,10 @@ esac
 echo ""
 read -rp "  ¿Instalar Docker? (s/n): " _docker
 read -rp "  ¿Instalar Steam?  (s/n): " _steam
+
+if ! configure_terminal_dots; then
+    warn "Terminal DOTS no configurados; continuando con la instalación base."
+fi
 
 # ═══════════════════════════════════════════════════════════════
 #  Paquetes
@@ -468,4 +723,9 @@ if [ "$all_ok" = true ]; then
 else
     fail "Algunos componentes fallaron. Revisa los errores arriba."
     exit 1
+fi
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
 fi
