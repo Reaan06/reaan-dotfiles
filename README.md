@@ -34,6 +34,15 @@ The temporary resources are removed on success and failure. The downloaded
 upstream binary is a remote-shell trust boundary; `--backup=true` preserves
 existing files through the upstream backup mechanism.
 
+Before invoking upstream, the wrapper checks its managed config paths for Unix
+sockets, FIFOs, and block or character devices. If one is present, it creates
+a private timestamped `~/.gentleman-safe-backup-*/configs.tar.gz` snapshot and
+passes `--backup=false` to Gentleman.Dots. This is explicit rather than silent:
+the safe tar snapshot records the managed config tree without opening the
+special entry, avoiding the upstream recursive backup failure while leaving
+the original entry untouched. If the snapshot cannot be created, installation
+aborts fail-closed and terminal DOTS state remains `none`.
+
 The state file contains exactly one of `none`, `tmux`, `zellij`, or `herdr` at
 `$XDG_CONFIG_HOME/reaan/terminal-dots.conf` (or `~/.config/reaan/...`). The
 installer also stores `none`, `fish`, `zsh`, or `nushell` atomically at

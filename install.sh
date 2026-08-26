@@ -47,6 +47,65 @@ terminal_herdr_config_file() {
     printf '%s/herdr/config.toml\n' "$(terminal_config_root)"
 }
 
+upstream_managed_config_paths() {
+    printf '%s\n' \
+        "$HOME/.config/nvim" \
+        "$HOME/.config/fish" \
+        "$HOME/.zshrc" \
+        "$HOME/.oh-my-zsh" \
+        "$HOME/.config/nushell" \
+        "$HOME/.tmux.conf" \
+        "$HOME/.tmux" \
+        "$HOME/.config/zellij" \
+        "$HOME/.config/herdr" \
+        "$HOME/.config/alacritty" \
+        "$HOME/.config/wezterm" \
+        "$HOME/.wezterm.lua" \
+        "$HOME/.config/kitty" \
+        "$HOME/.config/ghostty" \
+        "$HOME/.config/starship.toml"
+}
+
+managed_config_has_special_entry() {
+    local path special
+    while IFS= read -r path; do
+        [[ -e "$path" || -L "$path" ]] || continue
+        if ! special="$(find -P -- "$path" \( -type s -o -type p -o -type b -o -type c \) -print -quit 2>/dev/null)"; then
+            return 1
+        fi
+        [[ -z "$special" ]] || return 0
+    done < <(upstream_managed_config_paths)
+    return 2
+}
+
+create_safe_config_backup() {
+    local backup_dir archive path relative
+    local -a existing_paths=()
+
+    backup_dir="$(mktemp -d "$HOME/.gentleman-safe-backup-$(date +%Y%m%d-%H%M%S)-XXXXXX")" || return 1
+    archive="$backup_dir/configs.tar.gz"
+    while IFS= read -r path; do
+        if [[ -e "$path" || -L "$path" ]]; then
+            relative="${path#"$HOME/"}"
+            existing_paths+=("$relative")
+        fi
+    done < <(upstream_managed_config_paths)
+
+    if ((${#existing_paths[@]} == 0)) || ! tar -C "$HOME" -czf "$archive" -- "${existing_paths[@]}"; then
+        rm -rf -- "$backup_dir"
+        return 1
+    fi
+    chmod 700 "$backup_dir" || { rm -rf -- "$backup_dir"; return 1; }
+    printf '%s\n' "$backup_dir"
+}
+
+restore_safe_config_backup() {
+    local backup_dir="$1" archive="$1/configs.tar.gz"
+
+    [[ -f "$archive" ]] || return 1
+    tar -C "$HOME" --extract --gzip --file "$archive" --overwrite
+}
+
 gentleman_installer_url() {
     case "$(uname -m)" in
         x86_64) printf '%s\n' 'https://github.com/Gentleman-Programming/Gentleman.Dots/releases/latest/download/gentleman-installer-linux-amd64' ;;
@@ -287,7 +346,20 @@ preserve_herdr_config() {
 
 install_gentleman_dots() {
     local shell="$1" wm="$2"
-    (
+    local backup_flag='--backup=true' safe_backup_dir
+
+    if managed_config_has_special_entry; then
+        safe_backup_dir="$(create_safe_config_backup)" || {
+            fail "Unable to create a safe backup for special config entries; terminal DOTS remain disabled."
+            return 1
+        }
+        backup_flag='--backup=false'
+        info "Special config entry detected; safe backup saved at: $safe_backup_dir"
+    elif [[ "$?" -ne 2 ]]; then
+        fail "Unable to inspect managed config entries; terminal DOTS remain disabled."
+        return 1
+    fi
+    if ! (
         local url binary workdir
         url="$(gentleman_installer_url)" || exit 1
         umask 077
@@ -302,11 +374,21 @@ install_gentleman_dots() {
             exit 1
         fi
         chmod 700 "$binary"
-        if ! (cd -- "$workdir" && "$binary" --non-interactive --terminal=kitty "--shell=$shell" "--wm=$wm" --backup=true); then
+        if ! (cd -- "$workdir" && "$binary" --non-interactive --terminal=kitty "--shell=$shell" "--wm=$wm" "$backup_flag"); then
             fail "Gentleman.Dots installation failed; terminal DOTS remain disabled."
             exit 1
         fi
-    )
+    ); then
+        if [[ -n "${safe_backup_dir:-}" ]]; then
+            # The upstream process may have changed managed files before failing.
+            if ! restore_safe_config_backup "$safe_backup_dir"; then
+                fail "Unable to restore the safe config snapshot; terminal DOTS remain disabled."
+                return 1
+            fi
+            ok "Safe config snapshot restored after Gentleman.Dots failure."
+        fi
+        return 1
+    fi
 }
 
 configure_terminal_dots() {

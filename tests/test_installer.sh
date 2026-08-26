@@ -38,7 +38,10 @@ printf 'pwd=%s\n' "$PWD" >> "${INSTALLER_LOG:?}"
 printf 'args=' >> "${INSTALLER_LOG:?}"
 printf '%s\0' "$@" >> "${INSTALLER_LOG:?}"
 printf '\n' >> "${INSTALLER_LOG:?}"
-[[ "${GENTLEMAN_TEST_FAIL:-}" != 1 ]] || exit 23
+if [[ "${GENTLEMAN_TEST_FAIL:-}" == 1 ]]; then
+    [[ -f "$HOME/.config/herdr/config.toml" ]] && printf 'mutated\n' > "$HOME/.config/herdr/config.toml"
+    exit 23
+fi
 mkdir -p "$HOME/.gentleman-markers"
 printf '%s\n' "$3" > "$HOME/.gentleman-markers/shell"
 printf '%s\n' "$4" > "$HOME/.gentleman-markers/wm"
@@ -136,6 +139,49 @@ test_official_wrapper() {
     [[ ! -e "$workdir" ]] || test_fail 'private workdir was not cleaned'
 }
 
+test_special_file_safe_backup() {
+    setup; setup_fake_curl
+    mkdir -p "$HOME/.config/herdr"
+    python3 - "$HOME/.config/herdr/herdr-client.sock" <<'PY'
+import socket
+import sys
+
+server = socket.socket(socket.AF_UNIX)
+server.bind(sys.argv[1])
+PY
+    output="$(printf '1\n1\n1\n' | configure_terminal_dots)"
+    assert_state herdr
+    assert_shell_state fish
+    grep -Fq -- '--backup=false' "$INSTALLER_LOG" || test_fail 'special-file install did not disable upstream backup'
+    ! grep -Fq -- '--backup=true' "$INSTALLER_LOG" || test_fail 'special-file install used upstream backup'
+    mapfile -t backup_archives < <(compgen -G "$HOME/.gentleman-safe-backup-*/configs.tar.gz")
+    backup_archive="${backup_archives[0]:-}"
+    [[ -f "$backup_archive" ]] || test_fail 'safe backup archive was not created'
+    tar -tzf "$backup_archive" | grep -Fqx '.config/herdr/' || test_fail 'managed config tree was not captured in safe backup'
+    [[ "$output" == *'safe backup saved at:'* ]] || test_fail 'safe backup location was not printed'
+    [[ -S "$HOME/.config/herdr/herdr-client.sock" ]] || test_fail 'socket was removed or mutated'
+}
+
+test_special_file_failure_restores_backup() {
+    setup; setup_fake_curl; export GENTLEMAN_TEST_FAIL=1
+    mkdir -p "$HOME/.config/herdr"
+    printf 'original\n' > "$HOME/.config/herdr/config.toml"
+    python3 - "$HOME/.config/herdr/herdr-client.sock" <<'PY'
+import socket
+import sys
+
+server = socket.socket(socket.AF_UNIX)
+server.bind(sys.argv[1])
+PY
+    output="$(printf '1\n1\n1\n' | configure_terminal_dots 2>&1)" && test_fail 'installer failure accepted'
+    assert_state none
+    assert_shell_state none
+    assert_content "$HOME/.config/herdr/config.toml" $'original\n'
+    [[ -S "$HOME/.config/herdr/herdr-client.sock" ]] || test_fail 'special entry was not preserved after restore'
+    [[ "$output" == *'Safe config snapshot restored after Gentleman.Dots failure.'* ]] || test_fail 'restore outcome was not reported'
+    [[ "$output" == *'terminal DOTS remain disabled'* ]] || test_fail 'failure was not reported as disabled'
+}
+
 test_kitty_shell_selection() {
     setup
     mkdir -p "$HOME/.config/kitty"
@@ -197,6 +243,8 @@ test_boundaries
 test_normalization_and_decline
 test_state_and_config_boundaries
 test_official_wrapper
+test_special_file_safe_backup
+test_special_file_failure_restores_backup
 test_failure_no_fallback
 test_kitty_shell_selection
 test_launcher
