@@ -39,12 +39,16 @@ terminal_state_file() {
     printf '%s/terminal-dots.conf\n' "$(terminal_state_dir)"
 }
 
-terminal_herdr_binary() {
-    printf '%s/.local/bin/herdr\n' "$HOME"
-}
-
 terminal_herdr_config_file() {
     printf '%s/herdr/config.toml\n' "$(terminal_config_root)"
+}
+
+gentleman_installer_url() {
+    case "$(uname -m)" in
+        x86_64) printf '%s\n' 'https://github.com/Gentleman-Programming/Gentleman.Dots/releases/latest/download/gentleman-installer-linux-amd64' ;;
+        aarch64) printf '%s\n' 'https://github.com/Gentleman-Programming/Gentleman.Dots/releases/latest/download/gentleman-installer-linux-arm64' ;;
+        *) fail "Unsupported architecture: $(uname -m). Gentleman.Dots supports Linux x86_64 and aarch64."; return 1 ;;
+    esac
 }
 
 write_terminal_state() {
@@ -54,7 +58,7 @@ write_terminal_state() {
     local temporary old_umask
 
     case "$value" in
-        none|herdr|tmux) ;;
+        none|herdr|tmux|zellij) ;;
         *) fail "Invalid terminal state: $value"; return 1 ;;
     esac
 
@@ -102,7 +106,7 @@ read_terminal_state() {
         return 0
     fi
     case "${lines[0]}" in
-        none|herdr|tmux) printf '%s\n' "${lines[0]}" ;;
+        none|herdr|tmux|zellij) printf '%s\n' "${lines[0]}" ;;
         *) printf 'none\n' ;;
     esac
 }
@@ -125,8 +129,34 @@ normalize_terminal_runtime_answer() {
     case "$answer" in
         ''|h|herdr|1) printf 'herdr\n' ;;
         t|tmux|2) printf 'tmux\n' ;;
+        z|zellij|3) printf 'zellij\n' ;;
+        n|none|4) printf 'none\n' ;;
         *) return 1 ;;
     esac
+}
+
+normalize_terminal_shell_answer() {
+    local answer="${1,,}"
+    answer="${answer#"${answer%%[![:space:]]*}"}"
+    answer="${answer%"${answer##*[![:space:]]}"}"
+    case "$answer" in
+        ''|z|zsh|2) printf 'zsh\n' ;;
+        f|fish|1) printf 'fish\n' ;;
+        n|nu|nushell|3) printf 'nushell\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+prompt_terminal_shell() {
+    local answer normalized
+    while true; do
+        read -r -p "  Shell (Fish/Zsh/Nushell, Zsh por defecto): " answer || answer=''
+        if normalized="$(normalize_terminal_shell_answer "$answer")"; then
+            printf '%s\n' "$normalized"
+            return 0
+        fi
+        warn "Invalid shell. Use Fish, Zsh, or Nushell." >&2
+    done
 }
 
 prompt_terminal_dots() {
@@ -144,12 +174,12 @@ prompt_terminal_dots() {
 prompt_terminal_runtime() {
     local answer normalized
     while true; do
-        read -r -p "  Runtime de terminal (Herdr/TMUX, Herdr por defecto): " answer || answer=''
+        read -r -p "  WM/session (TMUX/Zellij/Herdr/None, Herdr por defecto): " answer || answer=''
         if normalized="$(normalize_terminal_runtime_answer "$answer")"; then
             printf '%s\n' "$normalized"
             return 0
         fi
-        warn "Respuesta inválida. Usa Herdr o TMUX." >&2
+        warn "Invalid WM/session. Use TMUX, Zellij, Herdr, or None." >&2
     done
 }
 
@@ -163,76 +193,32 @@ preserve_herdr_config() {
     cp -p -- "$source" "$destination"
 }
 
-HERDR_INSTALLER_URL='https://herdr.dev/install.sh'
-
-install_herdr_runtime() {
-    local binary="$(terminal_herdr_binary)"
-    local binary_dir
-
-    if [[ -x "$binary" ]]; then
-        return 0
-    fi
-
-    binary_dir="$(dirname -- "$binary")"
-    if ! mkdir -p "$binary_dir"; then
-        fail "Herdr installation could not create its install directory; runtime remains disabled."
-        return 1
-    fi
-
+install_gentleman_dots() {
+    local shell="$1" wm="$2"
     (
-        local temporary=''
-
-        cleanup_herdr_download() {
-            if [[ -n "$temporary" ]]; then
-                rm -f -- "$temporary" || true
-            fi
-        }
-        trap cleanup_herdr_download EXIT
-
+        local url binary workdir
+        url="$(gentleman_installer_url)" || exit 1
         umask 077
-        if ! temporary="$(mktemp "$binary_dir/.herdr-download.XXXXXX")"; then
-            fail "Herdr installer staging failed; runtime remains disabled."
+        workdir="$(mktemp -d "${TMPDIR:-/tmp}/gentleman-dots.XXXXXX")" || exit 1
+        trap 'rm -rf -- "$workdir"' EXIT
+        binary="$workdir/gentleman-installer"
+        chmod 700 "$workdir"
+        : > "$binary"
+        chmod 700 "$binary"
+        if ! curl --fail --location --silent --show-error --output "$binary" "$url"; then
+            fail "Gentleman.Dots download failed; terminal DOTS remain disabled."
             exit 1
         fi
-        if ! chmod 0700 "$temporary"; then
-            fail "Herdr installer staging failed; runtime remains disabled."
-            exit 1
-        fi
-        if ! curl --fail --location --silent --show-error --output "$temporary" "$HERDR_INSTALLER_URL"; then
-            fail "Herdr download failed; runtime remains disabled."
-            exit 1
-        fi
-        if ! HERDR_INSTALL_DIR="$HOME/.local/bin" "$temporary"; then
-            fail "Herdr official installer failed; runtime remains disabled."
-            exit 1
-        fi
-        if [[ ! -x "$binary" ]]; then
-            fail "Herdr official installer did not provide an executable; runtime remains disabled."
+        chmod 700 "$binary"
+        if ! (cd -- "$workdir" && "$binary" --non-interactive --terminal=kitty "--shell=$shell" "--wm=$wm" --backup=true); then
+            fail "Gentleman.Dots installation failed; terminal DOTS remain disabled."
             exit 1
         fi
     )
 }
 
-install_tmux_runtime() {
-    if command -v tmux >/dev/null 2>&1; then
-        return 0
-    fi
-    if ! command -v yay >/dev/null 2>&1; then
-        fail "TMUX installation blocked: yay is unavailable."
-        return 1
-    fi
-    if ! yay -S --needed --noconfirm tmux; then
-        fail "TMUX installation failed; runtime remains disabled."
-        return 1
-    fi
-    if ! command -v tmux >/dev/null 2>&1; then
-        fail "TMUX installation failed: tmux was not found after yay completed."
-        return 1
-    fi
-}
-
 configure_terminal_dots() {
-    local selection
+    local selection shell
 
     selection="$(prompt_terminal_dots)"
     if ! write_terminal_state none; then
@@ -244,30 +230,28 @@ configure_terminal_dots() {
         return 0
     fi
 
+    shell="$(prompt_terminal_shell)"
     selection="$(prompt_terminal_runtime)"
     if ! write_terminal_state none; then
         fail "Unable to reset terminal DOTS before installation."
         return 1
     fi
     case "$selection" in
-        herdr)
-            if ! install_herdr_runtime || ! preserve_herdr_config; then
-                write_terminal_state none || true
-                return 1
-            fi
-            ;;
-        tmux)
-            if ! install_tmux_runtime; then
-                write_terminal_state none || true
-                return 1
-            fi
-            ;;
+        herdr|tmux|zellij|none) ;;
         *)
-            fail "Invalid terminal runtime selection."
+            fail "Invalid terminal WM/session selection."
             write_terminal_state none || true
             return 1
             ;;
     esac
+    if ! install_gentleman_dots "$shell" "$selection"; then
+        write_terminal_state none || true
+        return 1
+    fi
+    if [[ "$selection" == herdr ]] && ! preserve_herdr_config; then
+        write_terminal_state none || true
+        return 1
+    fi
     if ! write_terminal_state "$selection"; then
         write_terminal_state none || true
         fail "Unable to activate terminal DOTS safely."
@@ -346,8 +330,8 @@ CORE=(
     # Notificaciones
     swaync
 
-    # Terminal + Zsh
-    kitty zsh zsh-autosuggestions zsh-syntax-highlighting
+    # Terminal emulator (Gentleman.Dots owns shell packages and configuration)
+    kitty
 
     # Launcher
     rofi-wayland
@@ -427,7 +411,6 @@ deploy "dot_config/nvim"        "$HOME/.config/nvim"
 deploy "dot_config/cava"        "$HOME/.config/cava"
 deploy "dot_config/scripts"     "$HOME/.config/scripts"
 deploy "dot_config/qt6ct"       "$HOME/.config/qt6ct"
-deploy "dot_zshrc"              "$HOME/.zshrc"
 
 chmod +x "$HOME/.config/scripts/"* 2>/dev/null || true
 chmod +x "$HOME/.config/hypr/scripts/"* 2>/dev/null || true
@@ -601,42 +584,6 @@ WPEOF
 fi
 
 ok "Dotfiles desplegados"
-
-# ═══════════════════════════════════════════════════════════════
-#  Configuración de Zsh
-# ═══════════════════════════════════════════════════════════════
-
-header "Configurando Shell"
-
-ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    info "Instalando Oh My Zsh..."
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-    ok "Oh My Zsh instalado"
-fi
-
-if [ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]; then
-    info "Instalando Powerlevel10k..."
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
-    ok "Powerlevel10k instalado"
-fi
-
-if [ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]; then
-    info "Instalando zsh-autosuggestions..."
-    git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
-fi
-
-if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
-    info "Instalando zsh-syntax-highlighting..."
-    git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
-fi
-
-if [ "$SHELL" != "$(which zsh)" ]; then
-    info "Cambiando shell por defecto a zsh..."
-    sudo chsh -s "$(which zsh)" "$USER"
-    ok "Shell cambiada a zsh"
-fi
 
 # ═══════════════════════════════════════════════════════════════
 #  Servicios del sistema

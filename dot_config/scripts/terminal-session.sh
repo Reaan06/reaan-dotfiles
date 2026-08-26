@@ -22,7 +22,7 @@ terminal_session_read_state() {
         }
     ' "$state_file" 2>/dev/null)" || state=none
     case "$state" in
-        none|herdr|tmux) printf '%s\n' "$state" ;;
+        none|herdr|tmux|zellij) printf '%s\n' "$state" ;;
         *) printf 'none\n' ;;
     esac
 }
@@ -51,6 +51,14 @@ terminal_session_launch() {
             runtime="$(command -v tmux 2>/dev/null || true)"
             if [[ -z "$runtime" || ! -x "$runtime" ]]; then
                 printf 'Terminal session unavailable: TMUX is not installed.\n' >&2
+                return 1
+            fi
+            "$runtime"
+            ;;
+        zellij)
+            runtime="$(command -v zellij 2>/dev/null || true)"
+            if [[ -z "$runtime" || ! -x "$runtime" ]]; then
+                printf 'Terminal session unavailable: Zellij is not installed.\n' >&2
                 return 1
             fi
             "$runtime"
